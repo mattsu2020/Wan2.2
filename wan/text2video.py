@@ -378,15 +378,14 @@ class WanT2V:
                 sample_guide_scale = guide_scale[1] if t.item(
                 ) >= boundary else guide_scale[0]
 
-                noise_pred_cond = model(latent_model_input,
-                                        t=timestep,
-                                        **arg_c)[0]
-                noise_pred_uncond = model(latent_model_input,
-                                          t=timestep,
-                                          **arg_null)[0]
-
-                noise_pred = noise_pred_uncond + sample_guide_scale * (
-                    noise_pred_cond - noise_pred_uncond)
+                noise_pred = model(
+                    latent_model_input, t=timestep, **arg_c)[0]
+                noise_pred -= model(latent_model_input,
+                                     t=timestep,
+                                     **arg_null)[0]
+                noise_pred = model(latent_model_input,
+                                   t=timestep,
+                                   **arg_null)[0] + sample_guide_scale * noise_pred
 
                 temp_x0 = sample_scheduler.step(noise_pred.unsqueeze(0),
                                                 t,
