@@ -20,13 +20,13 @@ from .distributed.util import get_world_size
 from .modules.model import WanModel
 from .modules.t5 import T5EncoderModel
 from .modules.vae2_1 import Wan2_1_VAE
+from .utils.device import empty_device_cache, synchronize_device
 from .utils.fm_solvers import (
     FlowDPMSolverMultistepScheduler,
     get_sampling_sigmas,
     retrieve_timesteps,
 )
 from .utils.fm_solvers_unipc import FlowUniPCMultistepScheduler
-from .utils.device import empty_device_cache, synchronize_device
 
 
 class WanT2V:
@@ -200,7 +200,8 @@ class WanT2V:
         if offload_model or self.init_on_cpu:
             if next(getattr(
                     self,
-                    offload_model_name).parameters()).device.type in ('cuda', 'mps'):
+                    offload_model_name).parameters()).device.type in ('cuda',
+                                                                      'mps'):
                 # Offload unused model from GPU/MPS to CPU to free memory
                 getattr(self, offload_model_name).to('cpu')
                 empty_device_cache()
@@ -379,10 +380,11 @@ class WanT2V:
             if self.rank == 0:
                 videos = self.vae.decode(x0)
 
-        del noise, latents
+        del context, context_null, noise, latents, arg_c, arg_null, x0
         del sample_scheduler
+        gc.collect()
+        empty_device_cache()
         if offload_model:
-            gc.collect()
             synchronize_device()
         if dist.is_initialized():
             dist.barrier()
