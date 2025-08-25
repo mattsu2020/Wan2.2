@@ -228,7 +228,8 @@ class WanT2V:
                  guide_scale=5.0,
                  n_prompt="",
                  seed=-1,
-                 offload_model=True):
+                 offload_model=True,
+                 offload_vae=True):
         r"""
         Generates video frames from text prompt using diffusion process.
 
@@ -257,7 +258,9 @@ class WanT2V:
             seed (`int`, *optional*, defaults to -1):
                 Random seed for noise generation. If -1, use random seed.
             offload_model (`bool`, *optional*, defaults to True):
-                If True, offloads models to CPU during generation to save VRAM
+                If True, offloads diffusion models to CPU during generation to save VRAM
+            offload_vae (`bool`, *optional*, defaults to True):
+                If True, offloads the VAE to CPU after decoding to release GPU memory
 
         Returns:
             torch.Tensor:
@@ -300,15 +303,10 @@ class WanT2V:
             context = [t.to(self.device) for t in context]
             context_null = [t.to(self.device) for t in context_null]
 
-        noise = [
-            torch.randn(target_shape[0],
-                        target_shape[1],
-                        target_shape[2],
-                        target_shape[3],
-                        dtype=self.param_dtype,
-                        device=self.device,
-                        generator=seed_g)
-        ]
+        noise = torch.randn(target_shape,
+                            dtype=self.param_dtype,
+                            device=self.device,
+                            generator=seed_g)
 
         @contextmanager
         def noop_no_sync():
@@ -362,10 +360,8 @@ class WanT2V:
             arg_null = {'context': context_null, 'seq_len': seq_len}
 
             for _, t in enumerate(tqdm(timesteps)):
-                latent_model_input = latents
-                timestep = [t]
-
-                timestep = torch.stack(timestep)
+                latent_model_input = [latents]
+                timestep = t.unsqueeze(0)
 
                 model = self._prepare_model_for_timestep(
                     t, boundary, offload_model)
@@ -382,12 +378,11 @@ class WanT2V:
                 noise_pred = noise_pred_uncond + sample_guide_scale * (
                     noise_pred_cond - noise_pred_uncond)
 
-                temp_x0 = sample_scheduler.step(noise_pred.unsqueeze(0),
+                latents = sample_scheduler.step(noise_pred.unsqueeze(0),
                                                 t,
-                                                latents[0].unsqueeze(0),
+                                                latents.unsqueeze(0),
                                                 return_dict=False,
-                                                generator=seed_g)[0]
-                latents = [temp_x0.squeeze(0)]
+                                                generator=seed_g)[0].squeeze(0)
 
             x0 = latents
             if offload_model:
@@ -396,7 +391,11 @@ class WanT2V:
                 empty_device_cache()  # offload models to CPU; clear cache
                 synchronize_device()
             if self.rank == 0:
-                videos = self.vae.decode(x0)
+                videos = self.vae.decode([x0])
+                if offload_vae:
+                    self.vae.cpu()
+                    empty_device_cache()  # offload VAE; clear cache
+                    synchronize_device()
 
         del context, context_null, noise, latents, arg_c, arg_null, x0
         del sample_scheduler
