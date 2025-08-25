@@ -17,6 +17,22 @@ To install all dependencies:
 poetry install
 ```
 
+## macOS
+
+On macOS, install `ffmpeg` using [Homebrew](https://brew.sh/) and use the CPU build of PyTorch (which enables the MPS backend on Apple Silicon):
+
+```bash
+brew install ffmpeg
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+```
+
+Before enabling MPS acceleration, verify it is available:
+
+```python
+import torch
+torch.backends.mps.is_available()
+```
+
 ### Handling `flash-attn` Installation Issues
 
 If `flash-attn` fails due to **PEP 517 build issues**, you can try one of the following fixes.
@@ -32,6 +48,8 @@ poetry install
 ```bash
 poetry run pip install git+https://github.com/Dao-AILab/flash-attention.git
 ```
+
+> ⚠️ Skipping `flash-attn` causes the code to fall back to PyTorch's `scaled_dot_product_attention`, disabling padding masks and slowing down attention operations.
 
 ---
 

@@ -80,6 +80,24 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
+> ⚠️ Without `flash_attn`, the code falls back to PyTorch's `scaled_dot_product_attention`, which disables padding masks and can be significantly slower.
+
+#### macOS
+
+On macOS, install system and Python dependencies with Homebrew and pip:
+
+```bash
+brew install ffmpeg
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+```
+
+If you plan to use the Metal Performance Shaders (MPS) backend on Apple Silicon, verify that it is available before enabling it:
+
+```python
+import torch
+torch.backends.mps.is_available()
+```
+
 
 #### Model Download
 
