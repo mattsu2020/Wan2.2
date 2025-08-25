@@ -9,7 +9,7 @@ import imageio
 import torch
 import torchvision
 
-__all__ = ['save_video', 'save_image', 'str2bool']
+__all__ = ['save_video', 'save_image', 'str2bool', 'torch_gc']
 
 
 def rand_name(length=8, suffix=''):
@@ -101,6 +101,20 @@ def str2bool(v):
         return False
     else:
         raise argparse.ArgumentTypeError('Boolean value expected (True/False)')
+
+
+def torch_gc():
+    """
+    Release cached GPU memory and synchronize the device.
+
+    Uses CUDA when available otherwise falls back to Apple's MPS backend.
+    """
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+    elif torch.backends.mps.is_available():
+        torch.mps.empty_cache()
+        torch.mps.synchronize()
 
 
 def masks_like(tensor, zero=False, generator=None, p=0.2):
