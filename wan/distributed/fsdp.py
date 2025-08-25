@@ -29,7 +29,7 @@ def shard_model(
             param_dtype=param_dtype,
             reduce_dtype=reduce_dtype,
             buffer_dtype=buffer_dtype),
-        device_id=device_id,
+        device_id=device_id if torch.cuda.is_available() else None,
         sync_module_states=sync_module_states)
     return model
 
@@ -40,4 +40,5 @@ def free_model(model):
             _free_storage(m._handle.flat_param.data)
     del model
     gc.collect()
-    torch.cuda.empty_cache()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()

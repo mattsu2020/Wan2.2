@@ -224,10 +224,19 @@ def generate(args):
         args.offload_model = False if world_size > 1 else True
         logging.info(
             f"offload_model is not specified, set to {args.offload_model}.")
+
+    if torch.cuda.is_available():
+        device_type = "cuda"
+    elif torch.backends.mps.is_available():
+        device_type = "mps"
+    else:
+        device_type = "cpu"
+
     if world_size > 1:
-        torch.cuda.set_device(local_rank)
+        if device_type == "cuda":
+            torch.cuda.set_device(local_rank)
         dist.init_process_group(
-            backend="nccl",
+            backend="nccl" if device_type == "cuda" else "gloo",
             init_method="env://",
             rank=rank,
             world_size=world_size)
@@ -398,7 +407,8 @@ def generate(args):
             value_range=(-1, 1))
     del video
 
-    torch.cuda.synchronize()
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
     if dist.is_initialized():
         dist.barrier()
         dist.destroy_process_group()

@@ -17,6 +17,14 @@ __all__ = [
 ]
 
 
+def _get_default_device():
+    if torch.cuda.is_available():
+        return torch.device(torch.cuda.current_device())
+    if torch.backends.mps.is_available():
+        return torch.device('mps')
+    return torch.device('cpu')
+
+
 def fp16_clamp(x):
     if x.dtype == torch.float16 and torch.isinf(x).any():
         clamp = torch.finfo(x.dtype).max - 1000
@@ -475,14 +483,14 @@ class T5EncoderModel:
         self,
         text_len,
         dtype=torch.bfloat16,
-        device=torch.cuda.current_device(),
+        device=None,
         checkpoint_path=None,
         tokenizer_path=None,
         shard_fn=None,
     ):
         self.text_len = text_len
         self.dtype = dtype
-        self.device = device
+        self.device = device if device is not None else _get_default_device()
         self.checkpoint_path = checkpoint_path
         self.tokenizer_path = tokenizer_path
 
@@ -491,7 +499,7 @@ class T5EncoderModel:
             encoder_only=True,
             return_tokenizer=False,
             dtype=dtype,
-            device=device).eval().requires_grad_(False)
+            device=self.device).eval().requires_grad_(False)
         logging.info(f'loading {checkpoint_path}')
         model.load_state_dict(torch.load(checkpoint_path, map_location='cpu'))
         self.model = model
