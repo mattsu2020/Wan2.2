@@ -18,7 +18,7 @@ import wan
 from wan.configs import MAX_AREA_CONFIGS, SIZE_CONFIGS, SUPPORTED_SIZES, WAN_CONFIGS
 from wan.configs.shared_config import set_precision, wan_shared_cfg
 from wan.distributed.util import init_distributed_group
-from wan.utils.device import empty_device_cache, synchronize_device
+from wan.utils.device import empty_device_cache, log_memory_usage, synchronize_device
 from wan.utils.prompt_extend import DashScopePromptExpander, QwenPromptExpander
 from wan.utils.utils import save_video, str2bool
 
@@ -409,6 +409,7 @@ def generate(args):
         )
 
         logging.info(f"Generating video ...")
+        log_memory_usage()
         video = wan_t2v.generate(
             args.prompt,
             size=SIZE_CONFIGS[args.size],
@@ -420,6 +421,7 @@ def generate(args):
             seed=args.base_seed,
             offload_model=args.offload_model,
         )
+        log_memory_usage()
     elif "ti2v" in args.task:
         logging.info("Creating WanTI2V pipeline.")
         wan_ti2v = wan.WanTI2V(
@@ -435,6 +437,7 @@ def generate(args):
         )
 
         logging.info(f"Generating video ...")
+        log_memory_usage()
         video = wan_ti2v.generate(
             args.prompt,
             img=img,
@@ -448,6 +451,7 @@ def generate(args):
             seed=args.base_seed,
             offload_model=args.offload_model,
         )
+        log_memory_usage()
     else:
         logging.info("Creating WanI2V pipeline.")
         wan_i2v = wan.WanI2V(
@@ -463,6 +467,7 @@ def generate(args):
         )
 
         logging.info("Generating video ...")
+        log_memory_usage()
         video = wan_i2v.generate(
             args.prompt,
             img,
@@ -475,6 +480,7 @@ def generate(args):
             seed=args.base_seed,
             offload_model=args.offload_model,
         )
+        log_memory_usage()
 
     if rank == 0:
         if args.save_file is None:
