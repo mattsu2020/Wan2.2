@@ -28,6 +28,7 @@ from .utils.fm_solvers import (
     retrieve_timesteps,
 )
 from .utils.fm_solvers_unipc import FlowUniPCMultistepScheduler
+from .utils.device import empty_device_cache, synchronize_device
 
 
 class WanI2V:
@@ -380,7 +381,7 @@ class WanI2V:
             }
 
             if offload_model:
-                torch.cuda.empty_cache()
+                empty_device_cache()
 
             for _, t in enumerate(tqdm(timesteps)):
                 latent_model_input = [latent.to(self.device)]
@@ -397,12 +398,12 @@ class WanI2V:
                                         t=timestep,
                                         **arg_c)[0]
                 if offload_model:
-                    torch.cuda.empty_cache()
+                    empty_device_cache()
                 noise_pred_uncond = model(latent_model_input,
                                           t=timestep,
                                           **arg_null)[0]
                 if offload_model:
-                    torch.cuda.empty_cache()
+                    empty_device_cache()
                 noise_pred = noise_pred_uncond + sample_guide_scale * (
                     noise_pred_cond - noise_pred_uncond)
 
@@ -419,7 +420,7 @@ class WanI2V:
             if offload_model:
                 self.low_noise_model.cpu()
                 self.high_noise_model.cpu()
-                torch.cuda.empty_cache()
+                empty_device_cache()
 
             if self.rank == 0:
                 videos = self.vae.decode(x0)
@@ -428,7 +429,7 @@ class WanI2V:
         del sample_scheduler
         if offload_model:
             gc.collect()
-            torch.cuda.synchronize()
+            synchronize_device()
         if dist.is_initialized():
             dist.barrier()
 
