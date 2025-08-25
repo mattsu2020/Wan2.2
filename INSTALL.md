@@ -19,6 +19,8 @@ poetry install
 
 ### Handling `flash-attn` Installation Issues
 
+macOS users can skip installing `flash_attn`.
+
 If `flash-attn` fails due to **PEP 517 build issues**, you can try one of the following fixes.
 
 #### No-Build-Isolation Installation (Recommended)

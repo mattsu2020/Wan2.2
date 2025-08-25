@@ -26,7 +26,7 @@ dependencies = [
     "ftfy",
     "dashscope",
     "imageio-ffmpeg",
-    "flash_attn",
+    "flash_attn; platform_system != \"Darwin\"",
     "numpy>=1.23.5,<2"
 ]
 
