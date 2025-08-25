@@ -34,10 +34,35 @@ def shard_model(
     return model
 
 
-def free_model(model):
+def free_model(model, device=None):
+    """Release a sharded model and clear device caches.
+
+    Args:
+        model: The model instance to be freed.
+        device (optional): Target device to clear cache for. If ``None``,
+            the currently available accelerator is used. Accepts a
+            :class:`torch.device` or a device type string such as ``"cuda"``
+            or ``"mps"``.
+    """
+
     for m in model.modules():
         if isinstance(m, FSDP):
             _free_storage(m._handle.flat_param.data)
+
     del model
     gc.collect()
-    torch.cuda.empty_cache()
+
+    if device is None:
+        if torch.cuda.is_available():
+            device_type = "cuda"
+        elif torch.backends.mps.is_available():
+            device_type = "mps"
+        else:
+            device_type = "cpu"
+    else:
+        device_type = device.type if isinstance(device, torch.device) else str(device)
+
+    if device_type == "cuda" and torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    elif device_type == "mps" and torch.backends.mps.is_available():
+        torch.mps.empty_cache()
