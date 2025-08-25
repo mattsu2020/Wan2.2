@@ -398,7 +398,10 @@ def generate(args):
             value_range=(-1, 1))
     del video
 
-    torch.cuda.synchronize()
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    elif torch.backends.mps.is_available():
+        pass
     if dist.is_initialized():
         dist.barrier()
         dist.destroy_process_group()

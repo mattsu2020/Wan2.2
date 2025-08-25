@@ -195,7 +195,7 @@ class WanI2V:
         if offload_model or self.init_on_cpu:
             if next(getattr(
                     self,
-                    offload_model_name).parameters()).device.type == 'cuda':
+                    offload_model_name).parameters()).device.type in ('cuda', 'mps'):
                 getattr(self, offload_model_name).to('cpu')
             if next(getattr(
                     self,
@@ -377,7 +377,10 @@ class WanI2V:
             }
 
             if offload_model:
-                torch.cuda.empty_cache()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                elif torch.backends.mps.is_available():
+                    torch.mps.empty_cache()
 
             for _, t in enumerate(tqdm(timesteps)):
                 latent_model_input = [latent.to(self.device)]
@@ -393,11 +396,17 @@ class WanI2V:
                 noise_pred_cond = model(
                     latent_model_input, t=timestep, **arg_c)[0]
                 if offload_model:
-                    torch.cuda.empty_cache()
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                    elif torch.backends.mps.is_available():
+                        torch.mps.empty_cache()
                 noise_pred_uncond = model(
                     latent_model_input, t=timestep, **arg_null)[0]
                 if offload_model:
-                    torch.cuda.empty_cache()
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                    elif torch.backends.mps.is_available():
+                        torch.mps.empty_cache()
                 noise_pred = noise_pred_uncond + sample_guide_scale * (
                     noise_pred_cond - noise_pred_uncond)
 
@@ -415,7 +424,10 @@ class WanI2V:
             if offload_model:
                 self.low_noise_model.cpu()
                 self.high_noise_model.cpu()
-                torch.cuda.empty_cache()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                elif torch.backends.mps.is_available():
+                    torch.mps.empty_cache()
 
             if self.rank == 0:
                 videos = self.vae.decode(x0)
@@ -424,7 +436,10 @@ class WanI2V:
         del sample_scheduler
         if offload_model:
             gc.collect()
-            torch.cuda.synchronize()
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+            elif torch.backends.mps.is_available():
+                pass
         if dist.is_initialized():
             dist.barrier()
 
