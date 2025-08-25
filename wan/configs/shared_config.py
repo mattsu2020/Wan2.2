@@ -24,15 +24,13 @@ def set_precision(precision: str | None):
     precision: str or None
         Desired precision string ("fp32", "fp16" or "bf16"). If ``None``, a
         device specific default will be used. When running on Apple's MPS
-        backend, unsupported half-precision modes will fall back to ``fp32``.
+        backend, the runtime will attempt the requested precision and promote
+        unsupported operations to ``fp32`` as needed.
     """
     if precision is None:
         dtype = _default_dtype()
     else:
         dtype = _PRECISION_MAP.get(precision.lower(), _default_dtype())
-    if torch.backends.mps.is_available() and dtype != torch.float32:
-        # Some MPS operations require float32; ensure compatibility.
-        dtype = torch.float32
     wan_shared_cfg.dtype = dtype
     wan_shared_cfg.t5_dtype = dtype
     wan_shared_cfg.param_dtype = dtype
