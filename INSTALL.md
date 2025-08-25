@@ -56,6 +56,13 @@ the script:
 export PYTORCH_ENABLE_MPS_FALLBACK=1  # optional manual override
 ```
 
+`generate.py` also defaults `TORCH_MPS_HIGH_WATERMARK_RATIO` to `0.8` to balance
+MPS memory usage. Lower ratios free memory back to macOS more aggressively,
+reducing OOM risk at the cost of performance, while higher ratios keep more
+memory cached for speed but may exhaust available resources. Override the
+default with `--mps-watermark <ratio>` or by setting the environment variable
+manually.
+
 ---
 
 ### Running the Model

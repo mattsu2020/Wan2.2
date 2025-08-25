@@ -119,6 +119,12 @@ yourself before running the script:
 export PYTORCH_ENABLE_MPS_FALLBACK=1  # optional manual override
 ```
 
+`generate.py` also defaults `TORCH_MPS_HIGH_WATERMARK_RATIO=0.8` to limit how
+much memory the MPS backend caches. Lower ratios return memory to macOS more
+aggressively (safer on smaller GPUs but slower), while higher ratios keep more
+memory reserved for potential speedups at the risk of OOM. Override this value
+with `--mps-watermark <ratio>` or by setting the environment variable yourself.
+
 **Troubleshooting**
 
 - Ensure macOS 12.3 or later and the Xcode command-line tools are installed.

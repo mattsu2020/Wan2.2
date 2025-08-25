@@ -28,8 +28,20 @@ if torch.backends.mps.is_available():
         _MPS_FALLBACK_MSG = "PYTORCH_ENABLE_MPS_FALLBACK was not set. Defaulting to 1."
     else:
         _MPS_FALLBACK_MSG = f"PYTORCH_ENABLE_MPS_FALLBACK already set to {_mps_env}."
+
+    _watermark_env = os.environ.get("TORCH_MPS_HIGH_WATERMARK_RATIO")
+    if _watermark_env is None:
+        os.environ.setdefault("TORCH_MPS_HIGH_WATERMARK_RATIO", "0.8")
+        _MPS_WATERMARK_MSG = (
+            "TORCH_MPS_HIGH_WATERMARK_RATIO was not set. Defaulting to 0.8."
+        )
+    else:
+        _MPS_WATERMARK_MSG = (
+            f"TORCH_MPS_HIGH_WATERMARK_RATIO already set to {_watermark_env}."
+        )
 else:
     _MPS_FALLBACK_MSG = "MPS backend not available."
+    _MPS_WATERMARK_MSG = "MPS backend not available."
 
 
 EXAMPLE_PROMPT = {
@@ -120,6 +132,12 @@ def _parse_args():
         type=str2bool,
         default=None,
         help="Whether to offload the model to CPU after each model forward, reducing GPU memory usage.",
+    )
+    parser.add_argument(
+        "--mps-watermark",
+        type=float,
+        default=None,
+        help="Override TORCH_MPS_HIGH_WATERMARK_RATIO for Apple's MPS backend.",
     )
     parser.add_argument(
         "--ulysses_size",
@@ -270,6 +288,13 @@ def generate(args):
         device = "cpu"
     _init_logging(rank)
     logging.info(_MPS_FALLBACK_MSG)
+    logging.info(_MPS_WATERMARK_MSG)
+
+    if args.mps_watermark is not None and torch.backends.mps.is_available():
+        os.environ["TORCH_MPS_HIGH_WATERMARK_RATIO"] = str(args.mps_watermark)
+        logging.info(
+            f"TORCH_MPS_HIGH_WATERMARK_RATIO overridden to {args.mps_watermark}."
+        )
 
     if args.offload_model is None:
         args.offload_model = False if world_size > 1 else True
