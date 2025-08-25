@@ -211,7 +211,8 @@ class WanI2V:
                     offload_model_name).parameters()).device.type in ('cuda', 'mps'):
                 # Offload unused model from GPU/MPS to CPU to free memory
                 getattr(self, offload_model_name).to('cpu')
-                empty_device_cache()
+                empty_device_cache()  # offloaded unused model; free GPU cache
+                synchronize_device()
             if next(getattr(
                     self,
                     required_model_name).parameters()).device.type == 'cpu':
@@ -319,7 +320,8 @@ class WanI2V:
             context_null = self.text_encoder([n_prompt], self.device)
             if offload_model:
                 self.text_encoder.model.cpu()
-                empty_device_cache()
+                empty_device_cache()  # offloaded text encoder; free GPU cache
+                synchronize_device()
         else:
             context = self.text_encoder([input_prompt], torch.device('cpu'))
             context_null = self.text_encoder([n_prompt], torch.device('cpu'))
@@ -392,7 +394,8 @@ class WanI2V:
             }
 
             if offload_model:
-                empty_device_cache()
+                empty_device_cache()  # clear cache before sampling loop
+                synchronize_device()
 
             for _, t in enumerate(tqdm(timesteps)):
                 latent_model_input = [latent.to(self.device)]
@@ -409,12 +412,14 @@ class WanI2V:
                                         t=timestep,
                                         **arg_c)[0]
                 if offload_model:
-                    empty_device_cache()
+                    empty_device_cache()  # free cache after conditional pass
+                    synchronize_device()
                 noise_pred_uncond = model(latent_model_input,
                                           t=timestep,
                                           **arg_null)[0]
                 if offload_model:
-                    empty_device_cache()
+                    empty_device_cache()  # free cache after unconditional pass
+                    synchronize_device()
                 noise_pred = noise_pred_uncond + sample_guide_scale * (
                     noise_pred_cond - noise_pred_uncond)
 
@@ -431,7 +436,8 @@ class WanI2V:
             if offload_model:
                 self.low_noise_model.cpu()
                 self.high_noise_model.cpu()
-                empty_device_cache()
+                empty_device_cache()  # offload both models to CPU; clear cache
+                synchronize_device()
 
             if self.rank == 0:
                 videos = self.vae.decode(x0)
@@ -440,6 +446,7 @@ class WanI2V:
         del sample_scheduler
         if offload_model:
             gc.collect()
+            empty_device_cache()  # release cache after temporary allocations
             synchronize_device()
         if dist.is_initialized():
             dist.barrier()

@@ -314,7 +314,8 @@ class WanTI2V:
             context_null = self.text_encoder([n_prompt], self.device)
             if offload_model:
                 self.text_encoder.model.cpu()
-                empty_device_cache()
+                empty_device_cache()  # offloaded text encoder; free GPU cache
+                synchronize_device()
         else:
             context = self.text_encoder([input_prompt], torch.device('cpu'))
             context_null = self.text_encoder([n_prompt], torch.device('cpu'))
@@ -374,7 +375,8 @@ class WanTI2V:
 
             if offload_model or self.init_on_cpu:
                 self.model.to(self.device)
-                empty_device_cache()
+                empty_device_cache()  # model moved to device; clear stale cache
+                synchronize_device()
 
             for _, t in enumerate(tqdm(timesteps)):
                 latent_model_input = latents
@@ -408,8 +410,8 @@ class WanTI2V:
             x0 = latents
             if offload_model:
                 self.model.cpu()
+                empty_device_cache()  # offload model to CPU to free device memory
                 synchronize_device()
-                empty_device_cache()
             if self.rank == 0:
                 videos = self.vae.decode(x0)
 
@@ -417,6 +419,7 @@ class WanTI2V:
         del sample_scheduler
         if offload_model:
             gc.collect()
+            empty_device_cache()  # release cache after temporary allocations
             synchronize_device()
         if dist.is_initialized():
             dist.barrier()
@@ -517,7 +520,8 @@ class WanTI2V:
             context_null = self.text_encoder([n_prompt], self.device)
             if offload_model:
                 self.text_encoder.model.cpu()
-                empty_device_cache()
+                empty_device_cache()  # offloaded text encoder; free GPU cache
+                synchronize_device()
         else:
             context = self.text_encoder([input_prompt], torch.device('cpu'))
             context_null = self.text_encoder([n_prompt], torch.device('cpu'))
@@ -577,7 +581,8 @@ class WanTI2V:
 
             if offload_model or self.init_on_cpu:
                 self.model.to(self.device)
-                empty_device_cache()
+                empty_device_cache()  # model moved to device; clear stale cache
+                synchronize_device()
 
             for _, t in enumerate(tqdm(timesteps)):
                 latent_model_input = [latent.to(self.device)]
@@ -596,12 +601,14 @@ class WanTI2V:
                                              t=timestep,
                                              **arg_c)[0]
                 if offload_model:
-                    empty_device_cache()
+                    empty_device_cache()  # free cache after conditional pass
+                    synchronize_device()
                 noise_pred_uncond = self.model(latent_model_input,
                                                t=timestep,
                                                **arg_null)[0]
                 if offload_model:
-                    empty_device_cache()
+                    empty_device_cache()  # free cache after unconditional pass
+                    synchronize_device()
                 noise_pred = noise_pred_uncond + guide_scale * (
                     noise_pred_cond - noise_pred_uncond)
 
@@ -618,8 +625,8 @@ class WanTI2V:
 
             if offload_model:
                 self.model.cpu()
+                empty_device_cache()  # offload model to CPU to free device memory
                 synchronize_device()
-                empty_device_cache()
 
             if self.rank == 0:
                 videos = self.vae.decode(x0)
@@ -628,6 +635,7 @@ class WanTI2V:
         del sample_scheduler
         if offload_model:
             gc.collect()
+            empty_device_cache()  # release cache after temporary allocations
             synchronize_device()
         if dist.is_initialized():
             dist.barrier()

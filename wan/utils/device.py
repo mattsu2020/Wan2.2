@@ -24,6 +24,9 @@ def _default_device() -> torch.device:
 def empty_device_cache(device: str | torch.device | None = None) -> None:
     """Release cached memory on the given device.
 
+    Typically invoked after offloading large models or completing
+    memory-intensive allocations to return resources to the system.
+
     Args:
         device: Optional device specification. When ``None`` the best
             available device is used.
@@ -38,6 +41,9 @@ def empty_device_cache(device: str | torch.device | None = None) -> None:
 
 def synchronize_device(device: str | torch.device | None = None) -> None:
     """Synchronize the given device if necessary.
+
+    Useful after calling :func:`empty_device_cache` or performing
+    asynchronous transfers to ensure memory is actually freed.
 
     Args:
         device: Optional device specification. When ``None`` the best

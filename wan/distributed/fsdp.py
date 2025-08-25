@@ -8,7 +8,7 @@ from torch.distributed.fsdp import MixedPrecision, ShardingStrategy
 from torch.distributed.fsdp.wrap import lambda_auto_wrap_policy
 from torch.distributed.utils import _free_storage
 
-from ..utils.device import empty_device_cache
+from ..utils.device import empty_device_cache, synchronize_device
 
 
 def shard_model(
@@ -43,3 +43,4 @@ def free_model(model):
     del model
     gc.collect()
     empty_device_cache()
+    synchronize_device()  # ensure cached memory is reclaimed after offload
