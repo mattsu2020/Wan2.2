@@ -22,6 +22,7 @@ from .distributed.util import get_world_size
 from .modules.model import WanModel
 from .modules.t5 import T5EncoderModel
 from .modules.vae2_2 import Wan2_2_VAE
+from .utils.device import device_synchronize, empty_cache
 from .utils.fm_solvers import (
     FlowDPMSolverMultistepScheduler,
     get_sampling_sigmas,
@@ -95,9 +96,9 @@ class WanTI2V:
 
         self.vae_stride = config.vae_stride
         self.patch_size = config.patch_size
-        self.vae = Wan2_2_VAE(
-            vae_pth=os.path.join(checkpoint_dir, config.vae_checkpoint),
-            device=self.device)
+        self.vae = Wan2_2_VAE(vae_pth=os.path.join(checkpoint_dir,
+                                                   config.vae_checkpoint),
+                              device=self.device)
 
         logging.info(f"Creating WanModel from {checkpoint_dir}")
         self.model = WanModel.from_pretrained(checkpoint_dir)
@@ -211,30 +212,28 @@ class WanTI2V:
         """
         # i2v
         if img is not None:
-            return self.i2v(
-                input_prompt=input_prompt,
-                img=img,
-                max_area=max_area,
-                frame_num=frame_num,
-                shift=shift,
-                sample_solver=sample_solver,
-                sampling_steps=sampling_steps,
-                guide_scale=guide_scale,
-                n_prompt=n_prompt,
-                seed=seed,
-                offload_model=offload_model)
+            return self.i2v(input_prompt=input_prompt,
+                            img=img,
+                            max_area=max_area,
+                            frame_num=frame_num,
+                            shift=shift,
+                            sample_solver=sample_solver,
+                            sampling_steps=sampling_steps,
+                            guide_scale=guide_scale,
+                            n_prompt=n_prompt,
+                            seed=seed,
+                            offload_model=offload_model)
         # t2v
-        return self.t2v(
-            input_prompt=input_prompt,
-            size=size,
-            frame_num=frame_num,
-            shift=shift,
-            sample_solver=sample_solver,
-            sampling_steps=sampling_steps,
-            guide_scale=guide_scale,
-            n_prompt=n_prompt,
-            seed=seed,
-            offload_model=offload_model)
+        return self.t2v(input_prompt=input_prompt,
+                        size=size,
+                        frame_num=frame_num,
+                        shift=shift,
+                        sample_solver=sample_solver,
+                        sampling_steps=sampling_steps,
+                        guide_scale=guide_scale,
+                        n_prompt=n_prompt,
+                        seed=seed,
+                        offload_model=offload_model)
 
     def t2v(self,
             input_prompt,
@@ -282,7 +281,8 @@ class WanTI2V:
         """
         # preprocess
         F = frame_num
-        target_shape = (self.vae.model.z_dim, (F - 1) // self.vae_stride[0] + 1,
+        target_shape = (self.vae.model.z_dim,
+                        (F - 1) // self.vae_stride[0] + 1,
                         size[1] // self.vae_stride[1],
                         size[0] // self.vae_stride[2])
 
@@ -309,14 +309,13 @@ class WanTI2V:
             context_null = [t.to(self.device) for t in context_null]
 
         noise = [
-            torch.randn(
-                target_shape[0],
-                target_shape[1],
-                target_shape[2],
-                target_shape[3],
-                dtype=torch.float32,
-                device=self.device,
-                generator=seed_g)
+            torch.randn(target_shape[0],
+                        target_shape[1],
+                        target_shape[2],
+                        target_shape[3],
+                        dtype=torch.float32,
+                        device=self.device,
+                        generator=seed_g)
         ]
 
         @contextmanager
@@ -337,8 +336,9 @@ class WanTI2V:
                     num_train_timesteps=self.num_train_timesteps,
                     shift=1,
                     use_dynamic_shifting=False)
-                sample_scheduler.set_timesteps(
-                    sampling_steps, device=self.device, shift=shift)
+                sample_scheduler.set_timesteps(sampling_steps,
+                                               device=self.device,
+                                               shift=shift)
                 timesteps = sample_scheduler.timesteps
             elif sample_solver == 'dpm++':
                 sample_scheduler = FlowDPMSolverMultistepScheduler(
@@ -346,10 +346,9 @@ class WanTI2V:
                     shift=1,
                     use_dynamic_shifting=False)
                 sampling_sigmas = get_sampling_sigmas(sampling_steps, shift)
-                timesteps, _ = retrieve_timesteps(
-                    sample_scheduler,
-                    device=self.device,
-                    sigmas=sampling_sigmas)
+                timesteps, _ = retrieve_timesteps(sample_scheduler,
+                                                  device=self.device,
+                                                  sigmas=sampling_sigmas)
             else:
                 raise NotImplementedError("Unsupported solver.")
 
@@ -362,7 +361,7 @@ class WanTI2V:
 
             if offload_model or self.init_on_cpu:
                 self.model.to(self.device)
-                torch.cuda.empty_cache()
+                empty_cache(self.device)
 
             for _, t in enumerate(tqdm(timesteps)):
                 latent_model_input = latents
@@ -377,26 +376,27 @@ class WanTI2V:
                 ])
                 timestep = temp_ts.unsqueeze(0)
 
-                noise_pred_cond = self.model(
-                    latent_model_input, t=timestep, **arg_c)[0]
-                noise_pred_uncond = self.model(
-                    latent_model_input, t=timestep, **arg_null)[0]
+                noise_pred_cond = self.model(latent_model_input,
+                                             t=timestep,
+                                             **arg_c)[0]
+                noise_pred_uncond = self.model(latent_model_input,
+                                               t=timestep,
+                                               **arg_null)[0]
 
                 noise_pred = noise_pred_uncond + guide_scale * (
                     noise_pred_cond - noise_pred_uncond)
 
-                temp_x0 = sample_scheduler.step(
-                    noise_pred.unsqueeze(0),
-                    t,
-                    latents[0].unsqueeze(0),
-                    return_dict=False,
-                    generator=seed_g)[0]
+                temp_x0 = sample_scheduler.step(noise_pred.unsqueeze(0),
+                                                t,
+                                                latents[0].unsqueeze(0),
+                                                return_dict=False,
+                                                generator=seed_g)[0]
                 latents = [temp_x0.squeeze(0)]
             x0 = latents
             if offload_model:
                 self.model.cpu()
-                torch.cuda.synchronize()
-                torch.cuda.empty_cache()
+                device_synchronize(self.device)
+                empty_cache(self.device)
             if self.rank == 0:
                 videos = self.vae.decode(x0)
 
@@ -404,7 +404,7 @@ class WanTI2V:
         del sample_scheduler
         if offload_model:
             gc.collect()
-            torch.cuda.synchronize()
+            device_synchronize(self.device)
         if dist.is_initialized():
             dist.barrier()
 
@@ -474,7 +474,8 @@ class WanTI2V:
         assert img.width == ow and img.height == oh
 
         # to tensor
-        img = TF.to_tensor(img).sub_(0.5).div_(0.5).to(self.device).unsqueeze(1)
+        img = TF.to_tensor(img).sub_(0.5).div_(0.5).to(
+            self.device).unsqueeze(1)
 
         F = frame_num
         seq_len = ((F - 1) // self.vae_stride[0] + 1) * (
@@ -485,13 +486,13 @@ class WanTI2V:
         seed = seed if seed >= 0 else random.randint(0, sys.maxsize)
         seed_g = torch.Generator(device=self.device)
         seed_g.manual_seed(seed)
-        noise = torch.randn(
-            self.vae.model.z_dim, (F - 1) // self.vae_stride[0] + 1,
-            oh // self.vae_stride[1],
-            ow // self.vae_stride[2],
-            dtype=torch.float32,
-            generator=seed_g,
-            device=self.device)
+        noise = torch.randn(self.vae.model.z_dim,
+                            (F - 1) // self.vae_stride[0] + 1,
+                            oh // self.vae_stride[1],
+                            ow // self.vae_stride[2],
+                            dtype=torch.float32,
+                            generator=seed_g,
+                            device=self.device)
 
         if n_prompt == "":
             n_prompt = self.sample_neg_prompt
@@ -529,8 +530,9 @@ class WanTI2V:
                     num_train_timesteps=self.num_train_timesteps,
                     shift=1,
                     use_dynamic_shifting=False)
-                sample_scheduler.set_timesteps(
-                    sampling_steps, device=self.device, shift=shift)
+                sample_scheduler.set_timesteps(sampling_steps,
+                                               device=self.device,
+                                               shift=shift)
                 timesteps = sample_scheduler.timesteps
             elif sample_solver == 'dpm++':
                 sample_scheduler = FlowDPMSolverMultistepScheduler(
@@ -538,10 +540,9 @@ class WanTI2V:
                     shift=1,
                     use_dynamic_shifting=False)
                 sampling_sigmas = get_sampling_sigmas(sampling_steps, shift)
-                timesteps, _ = retrieve_timesteps(
-                    sample_scheduler,
-                    device=self.device,
-                    sigmas=sampling_sigmas)
+                timesteps, _ = retrieve_timesteps(sample_scheduler,
+                                                  device=self.device,
+                                                  sigmas=sampling_sigmas)
             else:
                 raise NotImplementedError("Unsupported solver.")
 
@@ -562,7 +563,7 @@ class WanTI2V:
 
             if offload_model or self.init_on_cpu:
                 self.model.to(self.device)
-                torch.cuda.empty_cache()
+                empty_cache(self.device)
 
             for _, t in enumerate(tqdm(timesteps)):
                 latent_model_input = [latent.to(self.device)]
@@ -577,23 +578,24 @@ class WanTI2V:
                 ])
                 timestep = temp_ts.unsqueeze(0)
 
-                noise_pred_cond = self.model(
-                    latent_model_input, t=timestep, **arg_c)[0]
+                noise_pred_cond = self.model(latent_model_input,
+                                             t=timestep,
+                                             **arg_c)[0]
                 if offload_model:
-                    torch.cuda.empty_cache()
-                noise_pred_uncond = self.model(
-                    latent_model_input, t=timestep, **arg_null)[0]
+                    empty_cache(self.device)
+                noise_pred_uncond = self.model(latent_model_input,
+                                               t=timestep,
+                                               **arg_null)[0]
                 if offload_model:
-                    torch.cuda.empty_cache()
+                    empty_cache(self.device)
                 noise_pred = noise_pred_uncond + guide_scale * (
                     noise_pred_cond - noise_pred_uncond)
 
-                temp_x0 = sample_scheduler.step(
-                    noise_pred.unsqueeze(0),
-                    t,
-                    latent.unsqueeze(0),
-                    return_dict=False,
-                    generator=seed_g)[0]
+                temp_x0 = sample_scheduler.step(noise_pred.unsqueeze(0),
+                                                t,
+                                                latent.unsqueeze(0),
+                                                return_dict=False,
+                                                generator=seed_g)[0]
                 latent = temp_x0.squeeze(0)
                 latent = (1. - mask2[0]) * z[0] + mask2[0] * latent
 
@@ -602,8 +604,8 @@ class WanTI2V:
 
             if offload_model:
                 self.model.cpu()
-                torch.cuda.synchronize()
-                torch.cuda.empty_cache()
+                device_synchronize(self.device)
+                empty_cache(self.device)
 
             if self.rank == 0:
                 videos = self.vae.decode(x0)
@@ -612,7 +614,7 @@ class WanTI2V:
         del sample_scheduler
         if offload_model:
             gc.collect()
-            torch.cuda.synchronize()
+            device_synchronize(self.device)
         if dist.is_initialized():
             dist.barrier()
 
