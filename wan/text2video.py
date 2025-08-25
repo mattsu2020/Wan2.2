@@ -205,7 +205,8 @@ class WanT2V:
                                                                       'mps'):
                 # Offload unused model from GPU/MPS to CPU to free memory
                 getattr(self, offload_model_name).to('cpu')
-                empty_device_cache()
+                empty_device_cache()  # offloaded unused model; free GPU cache
+                synchronize_device()
             if next(getattr(
                     self,
                     required_model_name).parameters()).device.type == 'cpu':
@@ -286,7 +287,8 @@ class WanT2V:
             context_null = self.text_encoder([n_prompt], self.device)
             if offload_model:
                 self.text_encoder.model.cpu()
-                empty_device_cache()
+                empty_device_cache()  # offloaded text encoder; free GPU cache
+                synchronize_device()
         else:
             context = self.text_encoder([input_prompt], torch.device('cpu'))
             context_null = self.text_encoder([n_prompt], torch.device('cpu'))
@@ -380,16 +382,16 @@ class WanT2V:
             if offload_model:
                 self.low_noise_model.cpu()
                 self.high_noise_model.cpu()
-                empty_device_cache()
+                empty_device_cache()  # offload models to CPU; clear cache
+                synchronize_device()
             if self.rank == 0:
                 videos = self.vae.decode(x0)
 
         del context, context_null, noise, latents, arg_c, arg_null, x0
         del sample_scheduler
         gc.collect()
-        empty_device_cache()
-        if offload_model:
-            synchronize_device()
+        empty_device_cache()  # release cache after temporary allocations
+        synchronize_device()
         if dist.is_initialized():
             dist.barrier()
 
