@@ -13,6 +13,12 @@ try:
 except ModuleNotFoundError:
     FLASH_ATTN_2_AVAILABLE = False
 
+try:
+    from xformers.ops import memory_efficient_attention, LowerTriangularMask
+    XFORMERS_AVAILABLE = True
+except ModuleNotFoundError:
+    XFORMERS_AVAILABLE = False
+
 import warnings
 
 __all__ = [
@@ -161,6 +167,20 @@ def attention(
             dtype=dtype,
             version=fa_version,
         )
+
+    if XFORMERS_AVAILABLE and q.device.type == "mps":
+        if q_lens is not None or k_lens is not None:
+            warnings.warn(
+                'Padding mask is disabled when using memory_efficient_attention. It can have a significant impact on performance.'
+            )
+        attn_bias = LowerTriangularMask() if causal else None
+        q = q.to(dtype)
+        k = k.to(dtype)
+        v = v.to(dtype)
+        out = memory_efficient_attention(
+            q, k, v, attn_bias=attn_bias, p=dropout_p, scale=softmax_scale
+        )
+        return out
 
     if q_lens is not None or k_lens is not None:
         warnings.warn(
