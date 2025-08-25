@@ -9,7 +9,13 @@ import imageio
 import torch
 import torchvision
 
-__all__ = ['save_video', 'save_image', 'str2bool']
+__all__ = [
+    'save_video',
+    'save_image',
+    'str2bool',
+    'device_empty_cache',
+    'device_synchronize',
+]
 
 
 def rand_name(length=8, suffix=''):
@@ -19,6 +25,30 @@ def rand_name(length=8, suffix=''):
             suffix = '.' + suffix
         name += suffix
     return name
+
+
+def device_empty_cache(device):
+    """Release unused cached memory for the specified device."""
+    if isinstance(device, torch.device):
+        device_type = device.type
+    else:
+        device_type = str(device)
+    if device_type == 'cuda':
+        torch.cuda.empty_cache()
+    elif device_type == 'mps':
+        torch.mps.empty_cache()
+
+
+def device_synchronize(device):
+    """Synchronize the specified device if supported."""
+    if isinstance(device, torch.device):
+        device_type = device.type
+    else:
+        device_type = str(device)
+    if device_type == 'cuda':
+        torch.cuda.synchronize()
+    elif device_type == 'mps':
+        torch.mps.synchronize()
 
 
 def save_video(tensor,
