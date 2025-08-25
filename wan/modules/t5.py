@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .tokenizers import HuggingfaceTokenizer
+from ..utils.device import get_best_device
 
 __all__ = [
     'T5Model',
@@ -481,12 +482,7 @@ class T5EncoderModel:
         shard_fn=None,
     ):
         if device is None:
-            if torch.cuda.is_available():
-                device = torch.device(f"cuda:{torch.cuda.current_device()}")
-            elif torch.backends.mps.is_available():
-                device = torch.device("mps")
-            else:
-                device = torch.device("cpu")
+            device = get_best_device()
         self.text_len = text_len
         self.dtype = dtype
         self.device = device

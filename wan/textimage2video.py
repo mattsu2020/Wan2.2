@@ -29,7 +29,7 @@ from .utils.fm_solvers import (
 )
 from .utils.fm_solvers_unipc import FlowUniPCMultistepScheduler
 from .utils.utils import best_output_size, masks_like
-from .utils.device import empty_device_cache, synchronize_device
+from .utils.device import empty_device_cache, get_best_device, synchronize_device
 
 
 class WanTI2V:
@@ -73,12 +73,7 @@ class WanTI2V:
                 Convert DiT model parameters dtype to 'config.param_dtype'.
                 Only works without FSDP.
         """
-        if torch.cuda.is_available():
-            self.device = torch.device(f"cuda:{device_id}")
-        elif torch.backends.mps.is_available():
-            self.device = torch.device("mps")
-        else:
-            self.device = torch.device("cpu")
+        self.device = get_best_device(device_id)
         self.config = config
         self.rank = rank
         self.t5_cpu = t5_cpu
