@@ -15,6 +15,8 @@ from diffusers.schedulers.scheduling_utils import (
 )
 from diffusers.utils import deprecate, is_scipy_available
 
+from .mps import ensure_float32
+
 if is_scipy_available():
     import scipy.stats
 
@@ -766,16 +768,9 @@ class FlowUniPCMultistepScheduler(SchedulerMixin, ConfigMixin):
         # Make sure sigmas and timesteps have the same device and dtype as original_samples
         sigmas = self.sigmas.to(
             device=original_samples.device, dtype=original_samples.dtype)
-        if original_samples.device.type == "mps" and torch.is_floating_point(
-                timesteps):
-            # mps does not support float64
-            schedule_timesteps = self.timesteps.to(
-                original_samples.device, dtype=torch.float32)
-            timesteps = timesteps.to(
-                original_samples.device, dtype=torch.float32)
-        else:
-            schedule_timesteps = self.timesteps.to(original_samples.device)
-            timesteps = timesteps.to(original_samples.device)
+        schedule_timesteps = ensure_float32(
+            self.timesteps.to(original_samples.device))
+        timesteps = ensure_float32(timesteps.to(original_samples.device))
 
         # begin_index is None when the scheduler is used for training or pipeline does not implement set_begin_index
         if self.begin_index is None:
