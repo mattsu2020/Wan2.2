@@ -9,6 +9,7 @@ from torch import autocast
 from torch.utils.checkpoint import checkpoint
 
 from .attention import flash_attention
+from ..utils import ensure_float32
 
 __all__ = ['WanModel']
 
@@ -24,6 +25,7 @@ def sinusoidal_embedding_1d(dim, position, dtype: torch.dtype | None = None):
                    tensor.
     """
     assert dim % 2 == 0
+    position = ensure_float32(position)
     half = dim // 2
     if dtype is None:
         dtype = position.dtype if torch.is_floating_point(position) else torch.float32
@@ -61,6 +63,7 @@ def rope_params(max_seq_len, dim, theta=10000, dtype: torch.dtype = torch.float3
 
 
 def rope_apply(x, grid_sizes, freqs):
+    x = ensure_float32(x)
     n, c = x.size(2), x.size(3) // 2
 
     with autocast(device_type=x.device.type, enabled=False):
@@ -473,13 +476,16 @@ class WanModel(ModelMixin, ConfigMixin):
         """
         if self.model_type == 'i2v':
             assert y is not None
+        x = [ensure_float32(u) for u in x]
+        t = ensure_float32(t)
+        context = [ensure_float32(u) for u in context]
+        if y is not None:
+            y = [ensure_float32(u) for u in y]
+            x = [torch.cat([u, v], dim=0) for u, v in zip(x, y)]
         # params
         device = self.patch_embedding.weight.device
         if self.freqs.device != device:
             self.freqs = self.freqs.to(device)
-
-        if y is not None:
-            x = [torch.cat([u, v], dim=0) for u, v in zip(x, y)]
 
         # embeddings
         x = [self.patch_embedding(u.unsqueeze(0)) for u in x]
