@@ -18,7 +18,7 @@ import wan
 from wan.configs import MAX_AREA_CONFIGS, SIZE_CONFIGS, SUPPORTED_SIZES, WAN_CONFIGS
 from wan.distributed.util import init_distributed_group
 from wan.utils.prompt_extend import DashScopePromptExpander, QwenPromptExpander
-from wan.utils.utils import save_video, str2bool
+from wan.utils.utils import device_synchronize, save_video, str2bool
 
 EXAMPLE_PROMPT = {
     "t2v-A14B": {
@@ -410,7 +410,7 @@ def generate(args):
             value_range=(-1, 1))
     del video
 
-    torch.cuda.synchronize()
+    device_synchronize()
     if dist.is_initialized():
         dist.barrier()
         dist.destroy_process_group()

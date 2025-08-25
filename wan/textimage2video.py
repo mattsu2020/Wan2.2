@@ -28,7 +28,12 @@ from .utils.fm_solvers import (
     retrieve_timesteps,
 )
 from .utils.fm_solvers_unipc import FlowUniPCMultistepScheduler
-from .utils.utils import best_output_size, masks_like
+from .utils.utils import (
+    best_output_size,
+    device_empty_cache,
+    device_synchronize,
+    masks_like,
+)
 
 
 class WanTI2V:
@@ -365,7 +370,7 @@ class WanTI2V:
 
             if offload_model or self.init_on_cpu:
                 self.model.to(self.device)
-                torch.cuda.empty_cache()
+                device_empty_cache()
 
             for _, t in enumerate(tqdm(timesteps)):
                 latent_model_input = latents
@@ -399,8 +404,8 @@ class WanTI2V:
             x0 = latents
             if offload_model:
                 self.model.cpu()
-                torch.cuda.synchronize()
-                torch.cuda.empty_cache()
+                device_synchronize()
+                device_empty_cache()
             if self.rank == 0:
                 videos = self.vae.decode(x0)
 
@@ -408,7 +413,7 @@ class WanTI2V:
         del sample_scheduler
         if offload_model:
             gc.collect()
-            torch.cuda.synchronize()
+            device_synchronize()
         if dist.is_initialized():
             dist.barrier()
 
@@ -567,7 +572,7 @@ class WanTI2V:
 
             if offload_model or self.init_on_cpu:
                 self.model.to(self.device)
-                torch.cuda.empty_cache()
+                device_empty_cache()
 
             for _, t in enumerate(tqdm(timesteps)):
                 latent_model_input = [latent.to(self.device)]
@@ -586,12 +591,12 @@ class WanTI2V:
                                              t=timestep,
                                              **arg_c)[0]
                 if offload_model:
-                    torch.cuda.empty_cache()
+                    device_empty_cache()
                 noise_pred_uncond = self.model(latent_model_input,
                                                t=timestep,
                                                **arg_null)[0]
                 if offload_model:
-                    torch.cuda.empty_cache()
+                    device_empty_cache()
                 noise_pred = noise_pred_uncond + guide_scale * (
                     noise_pred_cond - noise_pred_uncond)
 
@@ -608,8 +613,8 @@ class WanTI2V:
 
             if offload_model:
                 self.model.cpu()
-                torch.cuda.synchronize()
-                torch.cuda.empty_cache()
+                device_synchronize()
+                device_empty_cache()
 
             if self.rank == 0:
                 videos = self.vae.decode(x0)
@@ -618,7 +623,7 @@ class WanTI2V:
         del sample_scheduler
         if offload_model:
             gc.collect()
-            torch.cuda.synchronize()
+            device_synchronize()
         if dist.is_initialized():
             dist.barrier()
 

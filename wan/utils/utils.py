@@ -9,7 +9,27 @@ import imageio
 import torch
 import torchvision
 
-__all__ = ['save_video', 'save_image', 'str2bool']
+__all__ = [
+    'save_video',
+    'save_image',
+    'str2bool',
+    'device_empty_cache',
+    'device_synchronize',
+]
+
+
+def device_empty_cache():
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    elif torch.backends.mps.is_available():
+        torch.mps.empty_cache()
+
+
+def device_synchronize():
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    elif torch.backends.mps.is_available():
+        torch.mps.synchronize()
 
 
 def rand_name(length=8, suffix=''):
