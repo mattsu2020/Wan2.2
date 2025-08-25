@@ -80,6 +80,32 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
+##### macOS
+
+```sh
+# Install ffmpeg via Homebrew
+brew install ffmpeg
+
+# Install PyTorch with MPS acceleration
+pip3 install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0
+
+# Install remaining dependencies without flash_attn
+pip install $(grep -v 'flash_attn' requirements.txt | xargs)
+```
+
+Set the following environment variable to enable CPU fallback for operations not yet
+implemented by Apple's MPS backend:
+
+```sh
+export PYTORCH_ENABLE_MPS_FALLBACK=1
+```
+
+**Troubleshooting**
+
+- Ensure macOS 12.3 or later and the Xcode command-line tools are installed.
+- If `MPS backend not available` errors occur, verify that your Python environment
+  targets `arm64` and reinstall PyTorch using the command above.
+
 
 #### Model Download
 
