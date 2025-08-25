@@ -22,6 +22,7 @@ from .distributed.util import get_world_size
 from .modules.model import WanModel
 from .modules.t5 import T5EncoderModel
 from .modules.vae2_2 import Wan2_2_VAE
+from .utils.device import empty_device_cache, synchronize_device
 from .utils.fm_solvers import (
     FlowDPMSolverMultistepScheduler,
     get_sampling_sigmas,
@@ -29,7 +30,6 @@ from .utils.fm_solvers import (
 )
 from .utils.fm_solvers_unipc import FlowUniPCMultistepScheduler
 from .utils.utils import best_output_size, masks_like
-from .utils.device import empty_device_cache, synchronize_device
 
 
 class WanTI2V:
@@ -381,7 +381,8 @@ class WanTI2V:
 
             if offload_model or self.init_on_cpu:
                 self.model.to(self.device)
-                empty_device_cache()  # model moved to device; clear stale cache
+                empty_device_cache(
+                )  # model moved to device; clear stale cache
                 synchronize_device()
 
             for _, t in enumerate(tqdm(timesteps)):
@@ -400,9 +401,15 @@ class WanTI2V:
                 noise_pred_cond = self.model(latent_model_input,
                                              t=timestep,
                                              **arg_c)[0]
+                if offload_model:
+                    empty_device_cache()  # free cache after conditional pass
+                    synchronize_device()
                 noise_pred_uncond = self.model(latent_model_input,
                                                t=timestep,
                                                **arg_null)[0]
+                if offload_model:
+                    empty_device_cache()  # free cache after unconditional pass
+                    synchronize_device()
 
                 noise_pred = noise_pred_uncond + guide_scale * (
                     noise_pred_cond - noise_pred_uncond)
@@ -416,7 +423,8 @@ class WanTI2V:
             x0 = latents
             if offload_model:
                 self.model.cpu()
-                empty_device_cache()  # offload model to CPU to free device memory
+                empty_device_cache(
+                )  # offload model to CPU to free device memory
                 synchronize_device()
             if self.rank == 0:
                 videos = self.vae.decode(x0)
@@ -593,7 +601,8 @@ class WanTI2V:
 
             if offload_model or self.init_on_cpu:
                 self.model.to(self.device)
-                empty_device_cache()  # model moved to device; clear stale cache
+                empty_device_cache(
+                )  # model moved to device; clear stale cache
                 synchronize_device()
 
             for _, t in enumerate(tqdm(timesteps)):
@@ -637,7 +646,8 @@ class WanTI2V:
 
             if offload_model:
                 self.model.cpu()
-                empty_device_cache()  # offload model to CPU to free device memory
+                empty_device_cache(
+                )  # offload model to CPU to free device memory
                 synchronize_device()
 
             if self.rank == 0:

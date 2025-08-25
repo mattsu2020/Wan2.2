@@ -375,9 +375,15 @@ class WanT2V:
                 noise_pred_cond = model(latent_model_input,
                                         t=timestep,
                                         **arg_c)[0]
+                if offload_model:
+                    empty_device_cache()  # free cache after conditional pass
+                    synchronize_device()
                 noise_pred_uncond = model(latent_model_input,
                                           t=timestep,
                                           **arg_null)[0]
+                if offload_model:
+                    empty_device_cache()  # free cache after unconditional pass
+                    synchronize_device()
 
                 noise_pred = noise_pred_uncond + sample_guide_scale * (
                     noise_pred_cond - noise_pred_uncond)
