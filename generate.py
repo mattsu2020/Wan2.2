@@ -258,6 +258,8 @@ def generate(args):
         device = "cpu"
     _init_logging(rank)
     logging.info(_MPS_FALLBACK_MSG)
+    if args.t5_cpu:
+        logging.info("T5 encoder will remain on CPU.")
 
     if args.offload_model is None:
         args.offload_model = False if world_size > 1 else True
