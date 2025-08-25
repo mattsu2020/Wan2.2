@@ -74,6 +74,18 @@ def _validate_args(args):
         args.size in SUPPORTED_SIZES[args.task]
     ), f"Unsupport size {args.size} for task {args.task}, supported sizes are: {', '.join(SUPPORTED_SIZES[args.task])}"
 
+    if args.offload_model is None:
+        if torch.backends.mps.is_available():
+            args.offload_model = True
+        else:
+            args.offload_model = True
+            if torch.cuda.is_available():
+                total_mem_gb = (
+                    torch.cuda.get_device_properties(0).total_memory / (1 << 30)
+                )
+                if total_mem_gb >= 80:
+                    args.offload_model = False
+
 
 def _parse_args():
     parser = argparse.ArgumentParser(
@@ -109,7 +121,10 @@ def _parse_args():
         "--offload_model",
         type=str2bool,
         default=None,
-        help="Whether to offload the model to CPU after each model forward, reducing GPU memory usage.",
+        help=(
+            "Whether to offload the model to CPU after each model forward, reducing GPU memory usage. "
+            "Automatically enabled on MPS."
+        ),
     )
     parser.add_argument(
         "--ulysses_size",
@@ -260,9 +275,7 @@ def generate(args):
         device = "cpu"
     _init_logging(rank)
 
-    if args.offload_model is None:
-        args.offload_model = False if world_size > 1 else True
-        logging.info(f"offload_model is not specified, set to {args.offload_model}.")
+    logging.info(f"offload_model is set to {args.offload_model}.")
     backend = (
         args.dist_backend
         or os.getenv("WAN_BACKEND")
