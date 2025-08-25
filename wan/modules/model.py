@@ -488,10 +488,16 @@ class WanModel(ModelMixin, ConfigMixin):
         x = [u.flatten(2).transpose(1, 2) for u in x]
         seq_lens = torch.tensor([u.size(1) for u in x], dtype=torch.long)
         assert seq_lens.max() <= seq_len
-        x = torch.cat([
-            torch.cat([u, u.new_zeros(1, seq_len - u.size(1), u.size(2))],
-                      dim=1) for u in x
-        ])
+
+        # allocate tensor for batch and copy individual sequences without nested cat
+        b = len(x)
+        dim = x[0].size(2)
+        padded = torch.zeros(b, seq_len, dim, device=device, dtype=x[0].dtype)
+        arange = torch.arange(seq_len, device=device)
+        for i, u in enumerate(x):
+            l = u.size(1)
+            padded[i].index_copy_(0, arange[:l], u[0])
+        x = padded
 
         # time embeddings
         if t.dim() == 1:
