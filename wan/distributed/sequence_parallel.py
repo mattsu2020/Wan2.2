@@ -1,6 +1,6 @@
 # Copyright 2024-2025 The Alibaba Wan Team Authors. All rights reserved.
 import torch
-import torch.cuda.amp as amp
+from torch import autocast
 
 from ..modules.model import sinusoidal_embedding_1d
 from .ulysses import distributed_attention
@@ -10,55 +10,54 @@ from .util import gather_forward, get_rank, get_world_size
 def pad_freqs(original_tensor, target_len):
     seq_len, s1, s2 = original_tensor.shape
     pad_size = target_len - seq_len
-    padding_tensor = torch.ones(
-        pad_size,
-        s1,
-        s2,
-        dtype=original_tensor.dtype,
-        device=original_tensor.device)
+    padding_tensor = torch.ones(pad_size,
+                                s1,
+                                s2,
+                                dtype=original_tensor.dtype,
+                                device=original_tensor.device)
     padded_tensor = torch.cat([original_tensor, padding_tensor], dim=0)
     return padded_tensor
 
 
-@torch.amp.autocast('cuda', enabled=False)
 def rope_apply(x, grid_sizes, freqs):
     """
     x:          [B, L, N, C].
     grid_sizes: [B, 3].
     freqs:      [M, C // 2].
     """
-    s, n, c = x.size(1), x.size(2), x.size(3) // 2
-    # split freqs
-    freqs = freqs.split([c - 2 * (c // 3), c // 3, c // 3], dim=1)
+    with autocast(device_type=x.device.type, enabled=False):
+        s, n, c = x.size(1), x.size(2), x.size(3) // 2
+        # split freqs
+        freqs = freqs.split([c - 2 * (c // 3), c // 3, c // 3], dim=1)
 
-    # loop over samples
-    output = []
-    for i, (f, h, w) in enumerate(grid_sizes.tolist()):
-        seq_len = f * h * w
+        # loop over samples
+        output = []
+        for i, (f, h, w) in enumerate(grid_sizes.tolist()):
+            seq_len = f * h * w
 
-        # precompute multipliers
-        x_i = torch.view_as_complex(x[i, :s].to(torch.float64).reshape(
-            s, n, -1, 2))
-        freqs_i = torch.cat([
-            freqs[0][:f].view(f, 1, 1, -1).expand(f, h, w, -1),
-            freqs[1][:h].view(1, h, 1, -1).expand(f, h, w, -1),
-            freqs[2][:w].view(1, 1, w, -1).expand(f, h, w, -1)
-        ],
-                            dim=-1).reshape(seq_len, 1, -1)
+            # precompute multipliers
+            x_i = torch.view_as_complex(x[i, :s].to(torch.float64).reshape(
+                s, n, -1, 2))
+            freqs_i = torch.cat([
+                freqs[0][:f].view(f, 1, 1, -1).expand(f, h, w, -1),
+                freqs[1][:h].view(1, h, 1, -1).expand(f, h, w, -1),
+                freqs[2][:w].view(1, 1, w, -1).expand(f, h, w, -1)
+            ],
+                                dim=-1).reshape(seq_len, 1, -1)
 
-        # apply rotary embedding
-        sp_size = get_world_size()
-        sp_rank = get_rank()
-        freqs_i = pad_freqs(freqs_i, s * sp_size)
-        s_per_rank = s
-        freqs_i_rank = freqs_i[(sp_rank * s_per_rank):((sp_rank + 1) *
-                                                       s_per_rank), :, :]
-        x_i = torch.view_as_real(x_i * freqs_i_rank).flatten(2)
-        x_i = torch.cat([x_i, x[i, s:]])
+            # apply rotary embedding
+            sp_size = get_world_size()
+            sp_rank = get_rank()
+            freqs_i = pad_freqs(freqs_i, s * sp_size)
+            s_per_rank = s
+            freqs_i_rank = freqs_i[(sp_rank * s_per_rank):((sp_rank + 1) *
+                                                           s_per_rank), :, :]
+            x_i = torch.view_as_real(x_i * freqs_i_rank).flatten(2)
+            x_i = torch.cat([x_i, x[i, s:]])
 
-        # append to collection
-        output.append(x_i)
-    return torch.stack(output).float()
+            # append to collection
+            output.append(x_i)
+        return torch.stack(output).float()
 
 
 def sp_dit_forward(
@@ -99,7 +98,7 @@ def sp_dit_forward(
     # time embeddings
     if t.dim() == 1:
         t = t.expand(t.size(0), seq_len)
-    with torch.amp.autocast('cuda', dtype=torch.float32):
+    with autocast(device_type=device.type, dtype=torch.float32):
         bt = t.size(0)
         t = t.flatten()
         e = self.time_embedding(
@@ -122,13 +121,12 @@ def sp_dit_forward(
     e0 = torch.chunk(e0, get_world_size(), dim=1)[get_rank()]
 
     # arguments
-    kwargs = dict(
-        e=e0,
-        seq_lens=seq_lens,
-        grid_sizes=grid_sizes,
-        freqs=self.freqs,
-        context=context,
-        context_lens=context_lens)
+    kwargs = dict(e=e0,
+                  seq_lens=seq_lens,
+                  grid_sizes=grid_sizes,
+                  freqs=self.freqs,
+                  context=context,
+                  context_lens=context_lens)
 
     for block in self.blocks:
         x = block(x, **kwargs)
@@ -144,7 +142,12 @@ def sp_dit_forward(
     return [u.float() for u in x]
 
 
-def sp_attn_forward(self, x, seq_lens, grid_sizes, freqs, dtype=torch.bfloat16):
+def sp_attn_forward(self,
+                    x,
+                    seq_lens,
+                    grid_sizes,
+                    freqs,
+                    dtype=torch.bfloat16):
     b, s, n, d = *x.shape[:2], self.num_heads, self.head_dim
     half_dtypes = (torch.float16, torch.bfloat16)
 

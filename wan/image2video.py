@@ -11,9 +11,9 @@ from functools import partial
 
 import numpy as np
 import torch
-import torch.cuda.amp as amp
 import torch.distributed as dist
 import torchvision.transforms.functional as TF
+from torch import autocast
 from tqdm import tqdm
 
 from .distributed.fsdp import shard_model
@@ -101,9 +101,9 @@ class WanI2V:
 
         self.vae_stride = config.vae_stride
         self.patch_size = config.patch_size
-        self.vae = Wan2_1_VAE(
-            vae_pth=os.path.join(checkpoint_dir, config.vae_checkpoint),
-            device=self.device)
+        self.vae = Wan2_1_VAE(vae_pth=os.path.join(checkpoint_dir,
+                                                   config.vae_checkpoint),
+                              device=self.device)
 
         logging.info(f"Creating WanModel from {checkpoint_dir}")
         self.low_noise_model = WanModel.from_pretrained(
@@ -282,14 +282,12 @@ class WanI2V:
         seed = seed if seed >= 0 else random.randint(0, sys.maxsize)
         seed_g = torch.Generator(device=self.device)
         seed_g.manual_seed(seed)
-        noise = torch.randn(
-            16,
-            (F - 1) // self.vae_stride[0] + 1,
-            lat_h,
-            lat_w,
-            dtype=torch.float32,
-            generator=seed_g,
-            device=self.device)
+        noise = torch.randn(16, (F - 1) // self.vae_stride[0] + 1,
+                            lat_h,
+                            lat_w,
+                            dtype=torch.float32,
+                            generator=seed_g,
+                            device=self.device)
 
         msk = torch.ones(1, F, lat_h, lat_w, device=self.device)
         msk[:, 1:] = 0
@@ -338,7 +336,7 @@ class WanI2V:
 
         # evaluation mode
         with (
-                torch.amp.autocast('cuda', dtype=self.param_dtype),
+                autocast(device_type=self.device.type, dtype=self.param_dtype),
                 torch.no_grad(),
                 no_sync_low_noise(),
                 no_sync_high_noise(),
@@ -350,8 +348,9 @@ class WanI2V:
                     num_train_timesteps=self.num_train_timesteps,
                     shift=1,
                     use_dynamic_shifting=False)
-                sample_scheduler.set_timesteps(
-                    sampling_steps, device=self.device, shift=shift)
+                sample_scheduler.set_timesteps(sampling_steps,
+                                               device=self.device,
+                                               shift=shift)
                 timesteps = sample_scheduler.timesteps
             elif sample_solver == 'dpm++':
                 sample_scheduler = FlowDPMSolverMultistepScheduler(
@@ -359,10 +358,9 @@ class WanI2V:
                     shift=1,
                     use_dynamic_shifting=False)
                 sampling_sigmas = get_sampling_sigmas(sampling_steps, shift)
-                timesteps, _ = retrieve_timesteps(
-                    sample_scheduler,
-                    device=self.device,
-                    sigmas=sampling_sigmas)
+                timesteps, _ = retrieve_timesteps(sample_scheduler,
+                                                  device=self.device,
+                                                  sigmas=sampling_sigmas)
             else:
                 raise NotImplementedError("Unsupported solver.")
 
@@ -395,23 +393,24 @@ class WanI2V:
                 sample_guide_scale = guide_scale[1] if t.item(
                 ) >= boundary else guide_scale[0]
 
-                noise_pred_cond = model(
-                    latent_model_input, t=timestep, **arg_c)[0]
+                noise_pred_cond = model(latent_model_input,
+                                        t=timestep,
+                                        **arg_c)[0]
                 if offload_model:
                     torch.cuda.empty_cache()
-                noise_pred_uncond = model(
-                    latent_model_input, t=timestep, **arg_null)[0]
+                noise_pred_uncond = model(latent_model_input,
+                                          t=timestep,
+                                          **arg_null)[0]
                 if offload_model:
                     torch.cuda.empty_cache()
                 noise_pred = noise_pred_uncond + sample_guide_scale * (
                     noise_pred_cond - noise_pred_uncond)
 
-                temp_x0 = sample_scheduler.step(
-                    noise_pred.unsqueeze(0),
-                    t,
-                    latent.unsqueeze(0),
-                    return_dict=False,
-                    generator=seed_g)[0]
+                temp_x0 = sample_scheduler.step(noise_pred.unsqueeze(0),
+                                                t,
+                                                latent.unsqueeze(0),
+                                                return_dict=False,
+                                                generator=seed_g)[0]
                 latent = temp_x0.squeeze(0)
 
                 x0 = [latent]

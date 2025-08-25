@@ -2,10 +2,10 @@
 import logging
 
 import torch
-import torch.cuda.amp as amp
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
+from torch import autocast
 
 __all__ = [
     'Wan2_1_VAE',
@@ -41,7 +41,7 @@ class RMS_norm(nn.Module):
     def __init__(self, dim, channel_first=True, images=True, bias=False):
         super().__init__()
         broadcastable_dims = (1, 1, 1) if not images else (1, 1)
-        shape = (dim, *broadcastable_dims) if channel_first else (dim,)
+        shape = (dim, *broadcastable_dims) if channel_first else (dim, )
 
         self.channel_first = channel_first
         self.scale = dim**0.5
@@ -49,9 +49,8 @@ class RMS_norm(nn.Module):
         self.bias = nn.Parameter(torch.zeros(shape)) if bias else 0.
 
     def forward(self, x):
-        return F.normalize(
-            x, dim=(1 if self.channel_first else
-                    -1)) * self.scale * self.gamma + self.bias
+        return F.normalize(x, dim=(1 if self.channel_first else
+                                   -1)) * self.scale * self.gamma + self.bias
 
 
 class Upsample(nn.Upsample):
@@ -81,8 +80,9 @@ class Resample(nn.Module):
             self.resample = nn.Sequential(
                 Upsample(scale_factor=(2., 2.), mode='nearest-exact'),
                 nn.Conv2d(dim, dim // 2, 3, padding=1))
-            self.time_conv = CausalConv3d(
-                dim, dim * 2, (3, 1, 1), padding=(1, 0, 0))
+            self.time_conv = CausalConv3d(dim,
+                                          dim * 2, (3, 1, 1),
+                                          padding=(1, 0, 0))
 
         elif mode == 'downsample2d':
             self.resample = nn.Sequential(
@@ -92,8 +92,10 @@ class Resample(nn.Module):
             self.resample = nn.Sequential(
                 nn.ZeroPad2d((0, 1, 0, 1)),
                 nn.Conv2d(dim, dim, 3, stride=(2, 2)))
-            self.time_conv = CausalConv3d(
-                dim, dim, (3, 1, 1), stride=(2, 1, 1), padding=(0, 0, 0))
+            self.time_conv = CausalConv3d(dim,
+                                          dim, (3, 1, 1),
+                                          stride=(2, 1, 1),
+                                          padding=(0, 0, 0))
 
         else:
             self.resample = nn.Identity()
@@ -243,10 +245,8 @@ class AttentionBlock(nn.Module):
         x = rearrange(x, 'b c t h w -> (b t) c h w')
         x = self.norm(x)
         # compute query, key, value
-        q, k, v = self.to_qkv(x).reshape(b * t, 1, c * 3,
-                                         -1).permute(0, 1, 3,
-                                                     2).contiguous().chunk(
-                                                         3, dim=-1)
+        q, k, v = self.to_qkv(x).reshape(b * t, 1, c * 3, -1).permute(
+            0, 1, 3, 2).contiguous().chunk(3, dim=-1)
 
         # apply attention
         x = F.scaled_dot_product_attention(
@@ -306,14 +306,13 @@ class Encoder3d(nn.Module):
         self.downsamples = nn.Sequential(*downsamples)
 
         # middle blocks
-        self.middle = nn.Sequential(
-            ResidualBlock(out_dim, out_dim, dropout), AttentionBlock(out_dim),
-            ResidualBlock(out_dim, out_dim, dropout))
+        self.middle = nn.Sequential(ResidualBlock(out_dim, out_dim, dropout),
+                                    AttentionBlock(out_dim),
+                                    ResidualBlock(out_dim, out_dim, dropout))
 
         # output blocks
-        self.head = nn.Sequential(
-            RMS_norm(out_dim, images=False), nn.SiLU(),
-            CausalConv3d(out_dim, z_dim, 3, padding=1))
+        self.head = nn.Sequential(RMS_norm(out_dim, images=False), nn.SiLU(),
+                                  CausalConv3d(out_dim, z_dim, 3, padding=1))
 
     def forward(self, x, feat_cache=None, feat_idx=[0]):
         if feat_cache is not None:
@@ -392,9 +391,9 @@ class Decoder3d(nn.Module):
         self.conv1 = CausalConv3d(z_dim, dims[0], 3, padding=1)
 
         # middle blocks
-        self.middle = nn.Sequential(
-            ResidualBlock(dims[0], dims[0], dropout), AttentionBlock(dims[0]),
-            ResidualBlock(dims[0], dims[0], dropout))
+        self.middle = nn.Sequential(ResidualBlock(dims[0], dims[0], dropout),
+                                    AttentionBlock(dims[0]),
+                                    ResidualBlock(dims[0], dims[0], dropout))
 
         # upsample blocks
         upsamples = []
@@ -416,9 +415,8 @@ class Decoder3d(nn.Module):
         self.upsamples = nn.Sequential(*upsamples)
 
         # output blocks
-        self.head = nn.Sequential(
-            RMS_norm(out_dim, images=False), nn.SiLU(),
-            CausalConv3d(out_dim, 3, 3, padding=1))
+        self.head = nn.Sequential(RMS_norm(out_dim, images=False), nn.SiLU(),
+                                  CausalConv3d(out_dim, 3, 3, padding=1))
 
     def forward(self, x, feat_cache=None, feat_idx=[0]):
         ## conv1
@@ -501,7 +499,8 @@ class WanVAE_(nn.Module):
 
         # modules
         self.encoder = Encoder3d(dim, z_dim * 2, dim_mult, num_res_blocks,
-                                 attn_scales, self.temperal_downsample, dropout)
+                                 attn_scales, self.temperal_downsample,
+                                 dropout)
         self.conv1 = CausalConv3d(z_dim * 2, z_dim * 2, 1)
         self.conv2 = CausalConv3d(z_dim, z_dim, 1)
         self.decoder = Decoder3d(dim, z_dim, dim_mult, num_res_blocks,
@@ -522,15 +521,13 @@ class WanVAE_(nn.Module):
         for i in range(iter_):
             self._enc_conv_idx = [0]
             if i == 0:
-                out = self.encoder(
-                    x[:, :, :1, :, :],
-                    feat_cache=self._enc_feat_map,
-                    feat_idx=self._enc_conv_idx)
+                out = self.encoder(x[:, :, :1, :, :],
+                                   feat_cache=self._enc_feat_map,
+                                   feat_idx=self._enc_conv_idx)
             else:
-                out_ = self.encoder(
-                    x[:, :, 1 + 4 * (i - 1):1 + 4 * i, :, :],
-                    feat_cache=self._enc_feat_map,
-                    feat_idx=self._enc_conv_idx)
+                out_ = self.encoder(x[:, :, 1 + 4 * (i - 1):1 + 4 * i, :, :],
+                                    feat_cache=self._enc_feat_map,
+                                    feat_idx=self._enc_conv_idx)
                 out = torch.cat([out, out_], 2)
         mu, log_var = self.conv1(out).chunk(2, dim=1)
         if isinstance(scale[0], torch.Tensor):
@@ -554,15 +551,13 @@ class WanVAE_(nn.Module):
         for i in range(iter_):
             self._conv_idx = [0]
             if i == 0:
-                out = self.decoder(
-                    x[:, :, i:i + 1, :, :],
-                    feat_cache=self._feat_map,
-                    feat_idx=self._conv_idx)
+                out = self.decoder(x[:, :, i:i + 1, :, :],
+                                   feat_cache=self._feat_map,
+                                   feat_idx=self._conv_idx)
             else:
-                out_ = self.decoder(
-                    x[:, :, i:i + 1, :, :],
-                    feat_cache=self._feat_map,
-                    feat_idx=self._conv_idx)
+                out_ = self.decoder(x[:, :, i:i + 1, :, :],
+                                    feat_cache=self._feat_map,
+                                    feat_idx=self._conv_idx)
                 out = torch.cat([out, out_], 2)
         self.clear_cache()
         return out
@@ -594,14 +589,13 @@ def _video_vae(pretrained_path=None, z_dim=None, device='cpu', **kwargs):
     Autoencoder3d adapted from Stable Diffusion 1.x, 2.x and XL.
     """
     # params
-    cfg = dict(
-        dim=96,
-        z_dim=z_dim,
-        dim_mult=[1, 2, 4, 4],
-        num_res_blocks=2,
-        attn_scales=[],
-        temperal_downsample=[False, True, True],
-        dropout=0.0)
+    cfg = dict(dim=96,
+               z_dim=z_dim,
+               dim_mult=[1, 2, 4, 4],
+               num_res_blocks=2,
+               attn_scales=[],
+               temperal_downsample=[False, True, True],
+               dropout=0.0)
     cfg.update(**kwargs)
 
     # init model
@@ -610,8 +604,8 @@ def _video_vae(pretrained_path=None, z_dim=None, device='cpu', **kwargs):
 
     # load checkpoint
     logging.info(f'loading {pretrained_path}')
-    model.load_state_dict(
-        torch.load(pretrained_path, map_location=device), assign=True)
+    model.load_state_dict(torch.load(pretrained_path, map_location=device),
+                          assign=True)
 
     return model
 
@@ -627,8 +621,9 @@ class Wan2_1_VAE:
         self.device = device
 
         mean = [
-            -0.7571, -0.7089, -0.9113, 0.1075, -0.1745, 0.9653, -0.1517, 1.5508,
-            0.4134, -0.0715, 0.5517, -0.3632, -0.1922, -0.9497, 0.2503, -0.2921
+            -0.7571, -0.7089, -0.9113, 0.1075, -0.1745, 0.9653, -0.1517,
+            1.5508, 0.4134, -0.0715, 0.5517, -0.3632, -0.1922, -0.9497, 0.2503,
+            -0.2921
         ]
         std = [
             2.8184, 1.4541, 2.3275, 2.6558, 1.2196, 1.7708, 2.6052, 2.0743,
@@ -648,14 +643,15 @@ class Wan2_1_VAE:
         """
         videos: A list of videos each with shape [C, T, H, W].
         """
-        with amp.autocast(dtype=self.dtype):
+        with autocast(device_type=self.device.type, dtype=self.dtype):
             return [
-                self.model.encode(u.unsqueeze(0), self.scale).float().squeeze(0)
+                self.model.encode(u.unsqueeze(0),
+                                  self.scale).float().squeeze(0)
                 for u in videos
             ]
 
     def decode(self, zs):
-        with amp.autocast(dtype=self.dtype):
+        with autocast(device_type=self.device.type, dtype=self.dtype):
             return [
                 self.model.decode(u.unsqueeze(0),
                                   self.scale).float().clamp_(-1, 1).squeeze(0)
