@@ -21,16 +21,6 @@ from wan.utils.device import synchronize_device
 from wan.utils.prompt_extend import DashScopePromptExpander, QwenPromptExpander
 from wan.utils.utils import save_video, str2bool
 
-if torch.backends.mps.is_available():
-    _mps_env = os.environ.get("PYTORCH_ENABLE_MPS_FALLBACK")
-    if _mps_env is None:
-        os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
-        _MPS_FALLBACK_MSG = "PYTORCH_ENABLE_MPS_FALLBACK was not set. Defaulting to 1."
-    else:
-        _MPS_FALLBACK_MSG = f"PYTORCH_ENABLE_MPS_FALLBACK already set to {_mps_env}."
-else:
-    _MPS_FALLBACK_MSG = "MPS backend not available."
-
 
 EXAMPLE_PROMPT = {
     "t2v-A14B": {
@@ -269,7 +259,6 @@ def generate(args):
     else:
         device = "cpu"
     _init_logging(rank)
-    logging.info(_MPS_FALLBACK_MSG)
 
     if args.offload_model is None:
         args.offload_model = False if world_size > 1 else True
