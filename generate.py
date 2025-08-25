@@ -19,6 +19,7 @@ from wan.configs import MAX_AREA_CONFIGS, SIZE_CONFIGS, SUPPORTED_SIZES, WAN_CON
 from wan.distributed.util import init_distributed_group
 from wan.utils.prompt_extend import DashScopePromptExpander, QwenPromptExpander
 from wan.utils.utils import save_video, str2bool
+from wan.utils.device import get_best_device, synchronize_device
 
 EXAMPLE_PROMPT = {
     "t2v-A14B": {
@@ -223,7 +224,8 @@ def generate(args):
     rank = int(os.getenv("RANK", 0))
     world_size = int(os.getenv("WORLD_SIZE", 1))
     local_rank = int(os.getenv("LOCAL_RANK", 0))
-    device = local_rank if torch.cuda.is_available() else "cpu"
+    best_device = get_best_device()
+    device = local_rank if best_device.type == "cuda" else 0
     _init_logging(rank)
 
     if args.offload_model is None:
@@ -233,10 +235,10 @@ def generate(args):
     backend = (
         args.dist_backend
         or os.getenv("WAN_BACKEND")
-        or ("nccl" if torch.cuda.is_available() else "gloo")
+        or ("nccl" if best_device.type == "cuda" else "gloo")
     )
     if world_size > 1:
-        if torch.cuda.is_available():
+        if best_device.type == "cuda":
             torch.cuda.set_device(local_rank)
         dist.init_process_group(
             backend=backend,
@@ -410,7 +412,7 @@ def generate(args):
             value_range=(-1, 1))
     del video
 
-    torch.cuda.synchronize()
+    synchronize_device()
     if dist.is_initialized():
         dist.barrier()
         dist.destroy_process_group()

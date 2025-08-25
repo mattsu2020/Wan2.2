@@ -28,6 +28,7 @@ from .utils.fm_solvers import (
     retrieve_timesteps,
 )
 from .utils.fm_solvers_unipc import FlowUniPCMultistepScheduler
+from .utils.device import get_best_device, synchronize_device, empty_device_cache
 
 
 class WanI2V:
@@ -71,12 +72,9 @@ class WanI2V:
                 Convert DiT model parameters dtype to 'config.param_dtype'.
                 Only works without FSDP.
         """
-        if torch.cuda.is_available():
-            self.device = torch.device(f"cuda:{device_id}")
-        elif torch.backends.mps.is_available():
-            self.device = torch.device("mps")
-        else:
-            self.device = torch.device("cpu")
+        device = get_best_device()
+        self.device = (torch.device(f"cuda:{device_id}")
+                        if device.type == "cuda" else device)
         self.config = config
         self.rank = rank
         self.t5_cpu = t5_cpu
@@ -380,7 +378,7 @@ class WanI2V:
             }
 
             if offload_model:
-                torch.cuda.empty_cache()
+                empty_device_cache()
 
             for _, t in enumerate(tqdm(timesteps)):
                 latent_model_input = [latent.to(self.device)]
@@ -397,12 +395,12 @@ class WanI2V:
                                         t=timestep,
                                         **arg_c)[0]
                 if offload_model:
-                    torch.cuda.empty_cache()
+                    empty_device_cache()
                 noise_pred_uncond = model(latent_model_input,
                                           t=timestep,
                                           **arg_null)[0]
                 if offload_model:
-                    torch.cuda.empty_cache()
+                    empty_device_cache()
                 noise_pred = noise_pred_uncond + sample_guide_scale * (
                     noise_pred_cond - noise_pred_uncond)
 
@@ -419,7 +417,7 @@ class WanI2V:
             if offload_model:
                 self.low_noise_model.cpu()
                 self.high_noise_model.cpu()
-                torch.cuda.empty_cache()
+                empty_device_cache()
 
             if self.rank == 0:
                 videos = self.vae.decode(x0)
@@ -428,7 +426,7 @@ class WanI2V:
         del sample_scheduler
         if offload_model:
             gc.collect()
-            torch.cuda.synchronize()
+            synchronize_device()
         if dist.is_initialized():
             dist.barrier()
 
