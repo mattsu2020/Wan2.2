@@ -47,6 +47,15 @@ pip install -r requirements.txt
 `flash-attn` is currently unsupported on macOS, but `xformers` provides similar
 attention optimizations for Apple hardware.
 
+When the MPS backend is available, `generate.py` automatically sets
+`PYTORCH_ENABLE_MPS_FALLBACK=1` to allow unsupported operations to fall back to
+the CPU. To override this default, define the variable manually before running
+the script:
+
+```bash
+export PYTORCH_ENABLE_MPS_FALLBACK=1  # optional manual override
+```
+
 ---
 
 ### Running the Model
