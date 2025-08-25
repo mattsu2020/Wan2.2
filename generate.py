@@ -219,11 +219,23 @@ def _init_logging(rank):
         logging.basicConfig(level=logging.ERROR)
 
 
+def _sync_device():
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    elif torch.backends.mps.is_available():
+        torch.mps.synchronize()
+
+
 def generate(args):
     rank = int(os.getenv("RANK", 0))
     world_size = int(os.getenv("WORLD_SIZE", 1))
     local_rank = int(os.getenv("LOCAL_RANK", 0))
-    device = local_rank if torch.cuda.is_available() else "cpu"
+    if torch.cuda.is_available():
+        device = local_rank
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = "cpu"
     _init_logging(rank)
 
     if args.offload_model is None:
@@ -410,10 +422,11 @@ def generate(args):
             value_range=(-1, 1))
     del video
 
-    torch.cuda.synchronize()
+    _sync_device()
     if dist.is_initialized():
         dist.barrier()
         dist.destroy_process_group()
+        _sync_device()
 
     logging.info("Finished.")
 
