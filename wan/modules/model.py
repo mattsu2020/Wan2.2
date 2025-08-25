@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.models.modeling_utils import ModelMixin
+from torch import autocast
 
 from .attention import flash_attention
 
@@ -24,7 +25,6 @@ def sinusoidal_embedding_1d(dim, position):
     return x
 
 
-@torch.amp.autocast('cuda', enabled=False)
 def rope_params(max_seq_len, dim, theta=10000):
     assert dim % 2 == 0
     freqs = torch.outer(
@@ -35,35 +35,35 @@ def rope_params(max_seq_len, dim, theta=10000):
     return freqs
 
 
-@torch.amp.autocast('cuda', enabled=False)
 def rope_apply(x, grid_sizes, freqs):
     n, c = x.size(2), x.size(3) // 2
 
-    # split freqs
-    freqs = freqs.split([c - 2 * (c // 3), c // 3, c // 3], dim=1)
+    with autocast(device_type=x.device.type, enabled=False):
+        # split freqs
+        freqs = freqs.split([c - 2 * (c // 3), c // 3, c // 3], dim=1)
 
-    # loop over samples
-    output = []
-    for i, (f, h, w) in enumerate(grid_sizes.tolist()):
-        seq_len = f * h * w
+        # loop over samples
+        output = []
+        for i, (f, h, w) in enumerate(grid_sizes.tolist()):
+            seq_len = f * h * w
 
-        # precompute multipliers
-        x_i = torch.view_as_complex(x[i, :seq_len].to(torch.float64).reshape(
-            seq_len, n, -1, 2))
-        freqs_i = torch.cat([
-            freqs[0][:f].view(f, 1, 1, -1).expand(f, h, w, -1),
-            freqs[1][:h].view(1, h, 1, -1).expand(f, h, w, -1),
-            freqs[2][:w].view(1, 1, w, -1).expand(f, h, w, -1)
-        ],
-                            dim=-1).reshape(seq_len, 1, -1)
+            # precompute multipliers
+            x_i = torch.view_as_complex(x[i, :seq_len].to(
+                torch.float64).reshape(seq_len, n, -1, 2))
+            freqs_i = torch.cat([
+                freqs[0][:f].view(f, 1, 1, -1).expand(f, h, w, -1),
+                freqs[1][:h].view(1, h, 1, -1).expand(f, h, w, -1),
+                freqs[2][:w].view(1, 1, w, -1).expand(f, h, w, -1)
+            ],
+                                dim=-1).reshape(seq_len, 1, -1)
 
-        # apply rotary embedding
-        x_i = torch.view_as_real(x_i * freqs_i).flatten(2)
-        x_i = torch.cat([x_i, x[i, seq_len:]])
+            # apply rotary embedding
+            x_i = torch.view_as_real(x_i * freqs_i).flatten(2)
+            x_i = torch.cat([x_i, x[i, seq_len:]])
 
-        # append to collection
-        output.append(x_i)
-    return torch.stack(output).float()
+            # append to collection
+            output.append(x_i)
+        return torch.stack(output).float()
 
 
 class WanRMSNorm(nn.Module):
@@ -142,12 +142,11 @@ class WanSelfAttention(nn.Module):
 
         q, k, v = qkv_fn(x)
 
-        x = flash_attention(
-            q=rope_apply(q, grid_sizes, freqs),
-            k=rope_apply(k, grid_sizes, freqs),
-            v=v,
-            k_lens=seq_lens,
-            window_size=self.window_size)
+        x = flash_attention(q=rope_apply(q, grid_sizes, freqs),
+                            k=rope_apply(k, grid_sizes, freqs),
+                            v=v,
+                            k_lens=seq_lens,
+                            window_size=self.window_size)
 
         # output
         x = x.flatten(2)
@@ -209,9 +208,9 @@ class WanAttentionBlock(nn.Module):
         self.cross_attn = WanCrossAttention(dim, num_heads, (-1, -1), qk_norm,
                                             eps)
         self.norm2 = WanLayerNorm(dim, eps)
-        self.ffn = nn.Sequential(
-            nn.Linear(dim, ffn_dim), nn.GELU(approximate='tanh'),
-            nn.Linear(ffn_dim, dim))
+        self.ffn = nn.Sequential(nn.Linear(dim, ffn_dim),
+                                 nn.GELU(approximate='tanh'),
+                                 nn.Linear(ffn_dim, dim))
 
         # modulation
         self.modulation = nn.Parameter(torch.randn(1, 6, dim) / dim**0.5)
@@ -235,7 +234,7 @@ class WanAttentionBlock(nn.Module):
             freqs(Tensor): Rope freqs, shape [1024, C / num_heads / 2]
         """
         assert e.dtype == torch.float32
-        with torch.amp.autocast('cuda', dtype=torch.float32):
+        with autocast(device_type=x.device.type, dtype=torch.float32):
             e = (self.modulation.unsqueeze(0) + e).chunk(6, dim=2)
         assert e[0].dtype == torch.float32
 
@@ -243,15 +242,16 @@ class WanAttentionBlock(nn.Module):
         y = self.self_attn(
             self.norm1(x).float() * (1 + e[1].squeeze(2)) + e[0].squeeze(2),
             seq_lens, grid_sizes, freqs)
-        with torch.amp.autocast('cuda', dtype=torch.float32):
+        with autocast(device_type=x.device.type, dtype=torch.float32):
             x = x + y * e[2].squeeze(2)
 
         # cross-attention & ffn function
         def cross_attn_ffn(x, context, context_lens, e):
             x = x + self.cross_attn(self.norm3(x), context, context_lens)
             y = self.ffn(
-                self.norm2(x).float() * (1 + e[4].squeeze(2)) + e[3].squeeze(2))
-            with torch.amp.autocast('cuda', dtype=torch.float32):
+                self.norm2(x).float() * (1 + e[4].squeeze(2)) +
+                e[3].squeeze(2))
+            with autocast(device_type=x.device.type, dtype=torch.float32):
                 x = x + y * e[5].squeeze(2)
             return x
 
@@ -283,11 +283,10 @@ class Head(nn.Module):
             e(Tensor): Shape [B, L1, C]
         """
         assert e.dtype == torch.float32
-        with torch.amp.autocast('cuda', dtype=torch.float32):
+        with autocast(device_type=x.device.type, dtype=torch.float32):
             e = (self.modulation.unsqueeze(0) + e.unsqueeze(2)).chunk(2, dim=2)
-            x = (
-                self.head(
-                    self.norm(x) * (1 + e[1].squeeze(2)) + e[0].squeeze(2)))
+            x = (self.head(
+                self.norm(x) * (1 + e[1].squeeze(2)) + e[0].squeeze(2)))
         return x
 
 
@@ -375,15 +374,18 @@ class WanModel(ModelMixin, ConfigMixin):
         self.eps = eps
 
         # embeddings
-        self.patch_embedding = nn.Conv3d(
-            in_dim, dim, kernel_size=patch_size, stride=patch_size)
-        self.text_embedding = nn.Sequential(
-            nn.Linear(text_dim, dim), nn.GELU(approximate='tanh'),
-            nn.Linear(dim, dim))
+        self.patch_embedding = nn.Conv3d(in_dim,
+                                         dim,
+                                         kernel_size=patch_size,
+                                         stride=patch_size)
+        self.text_embedding = nn.Sequential(nn.Linear(text_dim, dim),
+                                            nn.GELU(approximate='tanh'),
+                                            nn.Linear(dim, dim))
 
-        self.time_embedding = nn.Sequential(
-            nn.Linear(freq_dim, dim), nn.SiLU(), nn.Linear(dim, dim))
-        self.time_projection = nn.Sequential(nn.SiLU(), nn.Linear(dim, dim * 6))
+        self.time_embedding = nn.Sequential(nn.Linear(freq_dim, dim),
+                                            nn.SiLU(), nn.Linear(dim, dim))
+        self.time_projection = nn.Sequential(nn.SiLU(),
+                                             nn.Linear(dim, dim * 6))
 
         # blocks
         self.blocks = nn.ModuleList([
@@ -459,7 +461,7 @@ class WanModel(ModelMixin, ConfigMixin):
         # time embeddings
         if t.dim() == 1:
             t = t.expand(t.size(0), seq_len)
-        with torch.amp.autocast('cuda', dtype=torch.float32):
+        with autocast(device_type=device.type, dtype=torch.float32):
             bt = t.size(0)
             t = t.flatten()
             e = self.time_embedding(
@@ -478,13 +480,12 @@ class WanModel(ModelMixin, ConfigMixin):
             ]))
 
         # arguments
-        kwargs = dict(
-            e=e0,
-            seq_lens=seq_lens,
-            grid_sizes=grid_sizes,
-            freqs=self.freqs,
-            context=context,
-            context_lens=context_lens)
+        kwargs = dict(e=e0,
+                      seq_lens=seq_lens,
+                      grid_sizes=grid_sizes,
+                      freqs=self.freqs,
+                      context=context,
+                      context_lens=context_lens)
 
         for block in self.blocks:
             x = block(x, **kwargs)
