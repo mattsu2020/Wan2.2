@@ -225,9 +225,26 @@ def generate(args):
         logging.info(
             f"offload_model is not specified, set to {args.offload_model}.")
     if world_size > 1:
-        torch.cuda.set_device(local_rank)
+        cuda_available = torch.cuda.is_available()
+        available_backends = []
+        if dist.is_nccl_available():
+            available_backends.append("nccl")
+        if dist.is_gloo_available():
+            available_backends.append("gloo")
+        logging.info(
+            f"CUDA available: {cuda_available}, available backends: {available_backends}")
+        if cuda_available and "nccl" in available_backends:
+            backend = "nccl"
+            torch.cuda.set_device(local_rank)
+        elif "gloo" in available_backends:
+            backend = "gloo"
+        else:
+            raise RuntimeError(
+                "No supported distributed backend found. Available backends: "
+                f"{available_backends}")
+        logging.info(f"Using distributed backend: {backend}")
         dist.init_process_group(
-            backend="nccl",
+            backend=backend,
             init_method="env://",
             rank=rank,
             world_size=world_size)
