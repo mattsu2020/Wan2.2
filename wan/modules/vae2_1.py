@@ -617,6 +617,18 @@ class Wan2_1_VAE:
                  vae_pth='cache/vae_step_411000.pth',
                  dtype=torch.float,
                  device="cuda"):
+        if isinstance(device, str):
+            if device == "cuda":
+                if torch.cuda.is_available():
+                    device = torch.device(
+                        f"cuda:{torch.cuda.current_device()}")
+                elif torch.backends.mps.is_available():
+                    device = torch.device("mps")
+                else:
+                    logging.info("CUDA is not available, using CPU instead.")
+                    device = torch.device("cpu")
+            else:
+                device = torch.device(device)
         self.dtype = dtype
         self.device = device
 
