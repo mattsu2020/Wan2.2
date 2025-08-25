@@ -97,8 +97,10 @@ class WanTI2V:
             device=self.device,
             checkpoint_path=os.path.join(checkpoint_dir, config.t5_checkpoint),
             tokenizer_path=os.path.join(checkpoint_dir, config.t5_tokenizer),
-            shard_fn=shard_fn if t5_fsdp else None)
-        if not t5_fsdp:
+            shard_fn=shard_fn if t5_fsdp else None,
+            quantization=config.t5_quantization,
+        )
+        if not t5_fsdp and config.t5_quantization is None:
             self.text_encoder.model.to(self.param_dtype)
 
         self.vae_stride = config.vae_stride

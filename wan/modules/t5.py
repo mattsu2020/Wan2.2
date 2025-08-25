@@ -412,6 +412,32 @@ class T5Model(nn.Module):
         return x
 
 
+def _replace_with_bnb_linear(module, quantization, compute_dtype):
+    import bitsandbytes as bnb
+    for name, child in list(module.named_children()):
+        if isinstance(child, nn.Linear):
+            if quantization == '8bit':
+                new_layer = bnb.nn.Linear8bitLt(
+                    child.in_features,
+                    child.out_features,
+                    bias=child.bias is not None,
+                )
+            else:
+                new_layer = bnb.nn.Linear4bit(
+                    child.in_features,
+                    child.out_features,
+                    bias=child.bias is not None,
+                    compute_dtype=compute_dtype,
+                    quant_type='nf4',
+                )
+            new_layer.weight = child.weight
+            if child.bias is not None:
+                new_layer.bias = child.bias
+            setattr(module, name, new_layer)
+        else:
+            _replace_with_bnb_linear(child, quantization, compute_dtype)
+
+
 def _t5(name,
         encoder_only=False,
         decoder_only=False,
@@ -419,9 +445,12 @@ def _t5(name,
         tokenizer_kwargs={},
         dtype=torch.float32,
         device='cpu',
+        load_in_8bit=False,
+        load_in_4bit=False,
         **kwargs):
     # sanity check
     assert not (encoder_only and decoder_only)
+    assert not (load_in_8bit and load_in_4bit)
 
     # params
     if encoder_only:
@@ -441,8 +470,18 @@ def _t5(name,
     with torch.device(device):
         model = model_cls(**kwargs)
 
-    # set device
-    model = model.to(dtype=dtype, device=device)
+    # quantization
+    if load_in_8bit or load_in_4bit:
+        quantization = '8bit' if load_in_8bit else '4bit'
+        try:
+            _replace_with_bnb_linear(model, quantization, dtype)
+        except ImportError as e:
+            raise ImportError(
+                'bitsandbytes is required for 8bit/4bit quantization'
+            ) from e
+        model = model.to(device)
+    else:
+        model = model.to(dtype=dtype, device=device)
 
     # init tokenizer
     if return_tokenizer:
@@ -479,6 +518,7 @@ class T5EncoderModel:
         checkpoint_path=None,
         tokenizer_path=None,
         shard_fn=None,
+        quantization=None,
     ):
         if device is None:
             if torch.cuda.is_available():
@@ -498,7 +538,10 @@ class T5EncoderModel:
             encoder_only=True,
             return_tokenizer=False,
             dtype=dtype,
-            device=device).eval().requires_grad_(False)
+            device=device,
+            load_in_8bit=(quantization == '8bit'),
+            load_in_4bit=(quantization == '4bit'),
+        ).eval().requires_grad_(False)
         logging.info(f'loading {checkpoint_path}')
         model.load_state_dict(torch.load(checkpoint_path, map_location='cpu'))
         self.model = model

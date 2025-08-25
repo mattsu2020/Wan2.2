@@ -14,6 +14,7 @@ wan_shared_cfg.dtype = torch.float16
 # t5
 wan_shared_cfg.t5_model = 'umt5_xxl'
 wan_shared_cfg.t5_dtype = wan_shared_cfg.dtype
+wan_shared_cfg.t5_quantization = None
 wan_shared_cfg.text_len = 512
 
 # transformer
