@@ -313,6 +313,7 @@ class WanTI2V:
             context_null = [t.to(self.param_dtype) for t in context_null]
             if offload_model:
                 self.text_encoder.model.cpu()
+                gc.collect()  # immediately reclaim CPU memory after offloading text encoder
                 empty_device_cache()  # offloaded text encoder; free GPU cache
                 synchronize_device()
         else:
@@ -424,6 +425,7 @@ class WanTI2V:
             x0 = latents
             if offload_model:
                 self.model.cpu()
+                gc.collect()  # immediately reclaim CPU memory after offloading DiT model
                 empty_device_cache(
                 )  # offload model to CPU to free device memory
                 synchronize_device()
@@ -431,6 +433,7 @@ class WanTI2V:
                 videos = self.vae.decode(x0)
         if offload_model:
             self.vae.model.cpu()
+            gc.collect()  # immediately reclaim CPU memory after offloading VAE
             empty_device_cache()  # offload VAE to CPU; clear cache
             synchronize_device()
 
@@ -541,6 +544,7 @@ class WanTI2V:
             context_null = [t.to(self.param_dtype) for t in context_null]
             if offload_model:
                 self.text_encoder.model.cpu()
+                gc.collect()  # immediately reclaim CPU memory after offloading text encoder
                 empty_device_cache()  # offloaded text encoder; free GPU cache
                 synchronize_device()
         else:
@@ -655,6 +659,7 @@ class WanTI2V:
 
             if offload_model:
                 self.model.cpu()
+                gc.collect()  # immediately reclaim CPU memory after offloading DiT model
                 empty_device_cache(
                 )  # offload model to CPU to free device memory
                 synchronize_device()
@@ -663,6 +668,7 @@ class WanTI2V:
                 videos = self.vae.decode(x0)
         if offload_model:
             self.vae.model.cpu()
+            gc.collect()  # immediately reclaim CPU memory after offloading VAE
             empty_device_cache()  # offload VAE to CPU; clear cache
             synchronize_device()
 

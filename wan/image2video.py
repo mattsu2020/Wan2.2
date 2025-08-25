@@ -208,6 +208,7 @@ class WanI2V:
                     offload_model_name).parameters()).device.type in ('cuda', 'mps'):
                 # Offload unused model from GPU/MPS to CPU to free memory
                 getattr(self, offload_model_name).to('cpu')
+                gc.collect()  # immediately reclaim CPU memory now that model is on CPU
                 empty_device_cache()  # offloaded unused model; free GPU cache
                 synchronize_device()
             if next(getattr(
@@ -319,6 +320,7 @@ class WanI2V:
             context_null = [t.to(self.param_dtype) for t in context_null]
             if offload_model:
                 self.text_encoder.model.cpu()
+                gc.collect()  # immediately reclaim CPU memory after offloading text encoder
                 empty_device_cache()  # offloaded text encoder; free GPU cache
                 synchronize_device()
         else:
@@ -443,6 +445,7 @@ class WanI2V:
             if offload_model:
                 self.low_noise_model.cpu()
                 self.high_noise_model.cpu()
+                gc.collect()  # immediately reclaim CPU memory after offloading diffusion models
                 empty_device_cache()  # offload both models to CPU; clear cache
                 synchronize_device()
 
@@ -450,6 +453,7 @@ class WanI2V:
                 videos = self.vae.decode(x0)
         if offload_model:
             self.vae.model.cpu()
+            gc.collect()  # immediately reclaim CPU memory after offloading VAE
             empty_device_cache()  # offload VAE to CPU; clear cache
             synchronize_device()
 
