@@ -259,8 +259,19 @@ torchrun --nproc_per_node=8 generate.py --task ti2v-5B --size 1280*704 --ckpt_di
 
 > The process of prompt extension can be referenced [here](#2-using-prompt-extention).
 
+## Testing
 
+Use the following script to run a basic generation test:
 
+```bash
+bash tests/test.sh <local model dir> <gpu number>
+```
+
+On macOS with Apple silicon, append the `--mps` flag to run a single-process test with low-memory options enabled automatically:
+
+```bash
+bash tests/test.sh <local model dir> 1 --mps
+```
 
 ## Computational Efficiency on Different GPUs
 

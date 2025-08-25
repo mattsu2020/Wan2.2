@@ -4,3 +4,9 @@ Put all your models (Wan2.2-T2V-A14B, Wan2.2-I2V-A14B, Wan2.2-TI2V-5B) in a fold
 ```bash
 bash ./tests/test.sh <local model dir> <gpu number>
 ```
+
+On macOS with Apple silicon, append `--mps` to run a single-process test using the MPS backend and low-memory options:
+
+```bash
+bash ./tests/test.sh <local model dir> 1 --mps
+```
