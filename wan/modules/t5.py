@@ -516,5 +516,6 @@ class T5EncoderModel:
         ids = ids.to(device)
         mask = mask.to(device)
         seq_lens = mask.gt(0).sum(dim=1).long()
-        context = self.model(ids, mask)
+        with torch.inference_mode():
+            context = self.model(ids, mask)
         return [u[:v] for u, v in zip(context, seq_lens)]
