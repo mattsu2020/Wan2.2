@@ -35,9 +35,16 @@ def shard_model(
 
 
 def free_model(model):
+    try:
+        device_type = next(model.parameters()).device.type
+    except StopIteration:
+        device_type = "cpu"
     for m in model.modules():
         if isinstance(m, FSDP):
             _free_storage(m._handle.flat_param.data)
     del model
     gc.collect()
-    torch.cuda.empty_cache()
+    if device_type == "cuda":
+        torch.cuda.empty_cache()
+    elif device_type == "mps" and hasattr(torch, "mps"):
+        torch.mps.empty_cache()
