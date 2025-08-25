@@ -3,6 +3,8 @@ import os
 import torch
 import torch.distributed as dist
 
+from ..utils.device import get_best_device
+
 
 def init_distributed_group(backend: str | None = None):
     """Initialize sequence parallel group.
@@ -12,10 +14,9 @@ def init_distributed_group(backend: str | None = None):
     available, otherwise ``'gloo'``.
     """
     if backend is None:
-        backend = (
-            os.getenv("WAN_BACKEND")
-            or ("nccl" if torch.cuda.is_available() else "gloo")
-        )
+        backend = os.getenv("WAN_BACKEND")
+        if backend is None:
+            backend = "nccl" if get_best_device().type == "cuda" else "gloo"
     if not dist.is_initialized():
         dist.init_process_group(backend=backend)
 

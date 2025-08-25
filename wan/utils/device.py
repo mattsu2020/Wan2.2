@@ -9,13 +9,18 @@ from __future__ import annotations
 
 import torch
 
-__all__ = ["empty_device_cache", "synchronize_device"]
+__all__ = ["empty_device_cache", "synchronize_device", "get_best_device"]
 
 
-def _default_device() -> torch.device:
-    """Return the best available device."""
+def get_best_device(index: int | None = None) -> torch.device:
+    """Return the best available device as a :class:`torch.device`.
+
+    Preference order is CUDA, then MPS (Apple Silicon), and finally CPU.
+    When CUDA is available, an optional ``index`` can be supplied to select
+    a specific GPU.
+    """
     if torch.cuda.is_available():
-        return torch.device("cuda")
+        return torch.device("cuda", index or 0)
     if torch.backends.mps.is_available():
         return torch.device("mps")
     return torch.device("cpu")
@@ -31,7 +36,7 @@ def empty_device_cache(device: str | torch.device | None = None) -> None:
         device: Optional device specification. When ``None`` the best
             available device is used.
     """
-    dev = torch.device(device) if device is not None else _default_device()
+    dev = torch.device(device) if device is not None else get_best_device()
     if dev.type == "cuda":
         torch.cuda.empty_cache()
     elif dev.type == "mps" and hasattr(torch, "mps") and hasattr(torch.mps, "empty_cache"):
@@ -49,7 +54,7 @@ def synchronize_device(device: str | torch.device | None = None) -> None:
         device: Optional device specification. When ``None`` the best
             available device is used.
     """
-    dev = torch.device(device) if device is not None else _default_device()
+    dev = torch.device(device) if device is not None else get_best_device()
     if dev.type == "cuda":
         torch.cuda.synchronize()
     elif dev.type == "mps" and hasattr(torch, "mps") and hasattr(torch.mps, "synchronize"):

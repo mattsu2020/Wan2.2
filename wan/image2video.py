@@ -28,7 +28,7 @@ from .utils.fm_solvers import (
     retrieve_timesteps,
 )
 from .utils.fm_solvers_unipc import FlowUniPCMultistepScheduler
-from .utils.device import empty_device_cache, synchronize_device
+from .utils.device import empty_device_cache, get_best_device, synchronize_device
 
 
 class WanI2V:
@@ -37,7 +37,7 @@ class WanI2V:
         self,
         config,
         checkpoint_dir,
-        device_id=0,
+        device: torch.device | None = None,
         rank=0,
         t5_fsdp=False,
         dit_fsdp=False,
@@ -54,8 +54,8 @@ class WanI2V:
                 Object containing model parameters initialized from config.py
             checkpoint_dir (`str`):
                 Path to directory containing model checkpoints
-            device_id (`int`,  *optional*, defaults to 0):
-                Id of target GPU device
+            device (``torch.device``, *optional*, defaults to ``None``):
+                Target device. When ``None`` the best available device is used.
             rank (`int`,  *optional*, defaults to 0):
                 Process rank for distributed training
             t5_fsdp (`bool`, *optional*, defaults to False):
@@ -72,12 +72,7 @@ class WanI2V:
                 Convert DiT model parameters dtype to 'config.param_dtype'.
                 Only works without FSDP.
         """
-        if torch.cuda.is_available():
-            self.device = torch.device(f"cuda:{device_id}")
-        elif torch.backends.mps.is_available():
-            self.device = torch.device("mps")
-        else:
-            self.device = torch.device("cpu")
+        self.device = device or get_best_device()
         self.config = config
         self.rank = rank
         self.t5_cpu = t5_cpu
@@ -90,7 +85,7 @@ class WanI2V:
         if t5_fsdp or dit_fsdp or use_sp:
             self.init_on_cpu = False
 
-        shard_fn = partial(shard_model, device_id=device_id)
+        shard_fn = partial(shard_model, device_id=self.device)
         self.text_encoder = T5EncoderModel(
             text_len=config.text_len,
             dtype=config.t5_dtype,

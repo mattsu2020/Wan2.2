@@ -10,19 +10,9 @@ import imageio
 import torch
 import torchvision
 
+from .device import get_best_device
+
 __all__ = ['save_video', 'save_image', 'str2bool', 'get_best_device']
-
-
-def get_best_device():
-    """Return the best available torch device.
-
-    Preference order is CUDA, then MPS (Apple Silicon), and finally CPU.
-    """
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    if torch.backends.mps.is_available():
-        return torch.device("mps")
-    return torch.device("cpu")
 
 
 def rand_name(length=8, suffix=''):
