@@ -99,6 +99,8 @@ class WanI2V:
             tokenizer_path=os.path.join(checkpoint_dir, config.t5_tokenizer),
             shard_fn=shard_fn if t5_fsdp else None,
         )
+        if not t5_fsdp:
+            self.text_encoder.model.to(self.param_dtype)
 
         self.vae_stride = config.vae_stride
         self.patch_size = config.patch_size
