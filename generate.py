@@ -61,6 +61,8 @@ def _validate_args(args):
         assert args.image is not None, "Please specify the image path for i2v."
 
     cfg = WAN_CONFIGS[args.task]
+    if args.t5_quantization is not None:
+        cfg.t5_quantization = args.t5_quantization
 
     if args.sample_steps is None:
         args.sample_steps = cfg.sample_steps
@@ -136,6 +138,13 @@ def _parse_args():
         action="store_true",
         default=False,
         help="Whether to place T5 model on CPU.",
+    )
+    parser.add_argument(
+        "--t5_quantization",
+        type=str,
+        default=None,
+        choices=["8bit", "4bit"],
+        help="Quantization mode for T5 model.",
     )
     parser.add_argument(
         "--dit_fsdp",
@@ -307,6 +316,8 @@ def generate(args):
             )
 
     cfg = WAN_CONFIGS[args.task]
+    if args.t5_quantization is not None:
+        cfg.t5_quantization = args.t5_quantization
     if args.ulysses_size > 1:
         assert (
             cfg.num_heads % args.ulysses_size == 0
