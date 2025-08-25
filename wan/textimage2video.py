@@ -307,6 +307,7 @@ class WanTI2V:
             context_null = self.text_encoder([n_prompt], self.device)
             if offload_model:
                 self.text_encoder.model.cpu()
+                empty_device_cache()
         else:
             context = self.text_encoder([input_prompt], torch.device('cpu'))
             context_null = self.text_encoder([n_prompt], torch.device('cpu'))
@@ -509,6 +510,7 @@ class WanTI2V:
             context_null = self.text_encoder([n_prompt], self.device)
             if offload_model:
                 self.text_encoder.model.cpu()
+                empty_device_cache()
         else:
             context = self.text_encoder([input_prompt], torch.device('cpu'))
             context_null = self.text_encoder([n_prompt], torch.device('cpu'))
