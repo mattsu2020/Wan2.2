@@ -140,7 +140,8 @@ class WanTI2V:
                 The function to apply FSDP sharding.
             convert_model_dtype (`bool`):
                 Convert DiT model parameters dtype to 'config.param_dtype'.
-                Only works without FSDP.
+                Only works without FSDP and requires the checkpoint to support
+                the target dtype.
 
         Returns:
             torch.nn.Module:
@@ -161,6 +162,10 @@ class WanTI2V:
             model = shard_fn(model)
         else:
             if convert_model_dtype:
+                if model.param_dtype not in (torch.float32, self.param_dtype):
+                    raise ValueError(
+                        f"Checkpoint dtype {model.param_dtype} does not support conversion to {self.param_dtype}"
+                    )
                 model.to(self.param_dtype)
             if not self.init_on_cpu:
                 model.to(self.device)
