@@ -22,13 +22,6 @@ from wan.utils.utils import save_video, str2bool
 from wan.utils.device import synchronize_device
 
 
-def synchronize_device():
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
-    elif torch.backends.mps.is_available():
-        torch.mps.synchronize()
-
-
 EXAMPLE_PROMPT = {
     "t2v-A14B": {
         "prompt":
