@@ -16,7 +16,7 @@ def sinusoidal_embedding_1d(dim, position):
     # preprocess
     assert dim % 2 == 0
     half = dim // 2
-    position = position.type(torch.float64)
+    position = position.type(torch.float32)
 
     # calculation
     sinusoid = torch.outer(
@@ -28,9 +28,9 @@ def sinusoidal_embedding_1d(dim, position):
 def rope_params(max_seq_len, dim, theta=10000):
     assert dim % 2 == 0
     freqs = torch.outer(
-        torch.arange(max_seq_len),
+        torch.arange(max_seq_len, dtype=torch.float32),
         1.0 / torch.pow(theta,
-                        torch.arange(0, dim, 2).to(torch.float64).div(dim)))
+                        torch.arange(0, dim, 2, dtype=torch.float32).div(dim)))
     freqs = torch.polar(torch.ones_like(freqs), freqs)
     return freqs
 
@@ -39,17 +39,15 @@ def rope_apply(x, grid_sizes, freqs):
     n, c = x.size(2), x.size(3) // 2
 
     with autocast(device_type=x.device.type, enabled=False):
-        # split freqs
+        freqs = freqs.to(device=x.device)
         freqs = freqs.split([c - 2 * (c // 3), c // 3, c // 3], dim=1)
 
-        # loop over samples
         output = []
         for i, (f, h, w) in enumerate(grid_sizes.tolist()):
             seq_len = f * h * w
 
-            # precompute multipliers
-            x_i = torch.view_as_complex(x[i, :seq_len].to(
-                torch.float64).reshape(seq_len, n, -1, 2))
+            x_i = torch.view_as_complex(
+                x[i, :seq_len].to(torch.float32).reshape(seq_len, n, -1, 2))
             freqs_i = torch.cat([
                 freqs[0][:f].view(f, 1, 1, -1).expand(f, h, w, -1),
                 freqs[1][:h].view(1, h, 1, -1).expand(f, h, w, -1),
@@ -63,7 +61,7 @@ def rope_apply(x, grid_sizes, freqs):
 
             # append to collection
             output.append(x_i)
-        return torch.stack(output).float()
+        return torch.stack(output).to(x.dtype)
 
 
 class WanRMSNorm(nn.Module):
@@ -440,8 +438,7 @@ class WanModel(ModelMixin, ConfigMixin):
             assert y is not None
         # params
         device = self.patch_embedding.weight.device
-        if self.freqs.device != device:
-            self.freqs = self.freqs.to(device)
+        freqs = self.freqs.to(device)
 
         if y is not None:
             x = [torch.cat([u, v], dim=0) for u, v in zip(x, y)]
@@ -483,7 +480,7 @@ class WanModel(ModelMixin, ConfigMixin):
         kwargs = dict(e=e0,
                       seq_lens=seq_lens,
                       grid_sizes=grid_sizes,
-                      freqs=self.freqs,
+                      freqs=freqs,
                       context=context,
                       context_lens=context_lens)
 
