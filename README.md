@@ -113,6 +113,20 @@ export PYTORCH_ENABLE_MPS_FALLBACK=1  # optional manual override
 - Apple's GPUs have limited unified memory; if you encounter OOM errors, try running
   generation with `--offload_model True`.
 
+#### Quantized Inference (int8/nf4)
+
+Wan2.2 supports quantized weights through the [bitsandbytes](https://github.com/TimDettmers/bitsandbytes)
+library. Set `wan_shared_cfg.dtype` to `"int8"` or `"nf4"` to enable
+quantized loading. Quantized inference currently requires a single GPU and is
+incompatible with FSDP, sequence parallelism, or CPU offloading.
+
+```python
+from wan.configs.shared_config import wan_shared_cfg
+from wan.text2video import WanT2V
+
+wan_shared_cfg.dtype = "nf4"  # or "int8"
+model = WanT2V(wan_shared_cfg, "./Wan2.2-T2V-A14B", device_id=0, init_on_cpu=False)
+```
 
 #### Model Download
 

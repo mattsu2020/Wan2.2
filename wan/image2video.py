@@ -29,6 +29,7 @@ from .utils.fm_solvers import (
 )
 from .utils.fm_solvers_unipc import FlowUniPCMultistepScheduler
 from .utils.device import empty_device_cache, synchronize_device
+from .utils.quantization import quantize_model
 
 
 class WanI2V:
@@ -82,6 +83,12 @@ class WanI2V:
         self.rank = rank
         self.t5_cpu = t5_cpu
         self.init_on_cpu = init_on_cpu
+        self.quant_dtype = config.dtype if config.dtype in {"int8", "nf4"} else None
+
+        if self.quant_dtype and (t5_fsdp or dit_fsdp or use_sp or t5_cpu or init_on_cpu):
+            raise ValueError(
+                "Quantized inference is incompatible with FSDP, sequence parallelism, "
+                "or CPU offload.")
 
         self.num_train_timesteps = config.num_train_timesteps
         self.boundary = config.boundary
@@ -111,6 +118,9 @@ class WanI2V:
         logging.info(f"Creating WanModel from {checkpoint_dir}")
         self.low_noise_model = WanModel.from_pretrained(
             checkpoint_dir, subfolder=config.low_noise_checkpoint)
+        if self.quant_dtype:
+            self.low_noise_model = quantize_model(self.low_noise_model,
+                                                  self.quant_dtype)
         self.low_noise_model = self._configure_model(
             model=self.low_noise_model,
             use_sp=use_sp,
@@ -120,6 +130,9 @@ class WanI2V:
 
         self.high_noise_model = WanModel.from_pretrained(
             checkpoint_dir, subfolder=config.high_noise_checkpoint)
+        if self.quant_dtype:
+            self.high_noise_model = quantize_model(self.high_noise_model,
+                                                   self.quant_dtype)
         self.high_noise_model = self._configure_model(
             model=self.high_noise_model,
             use_sp=use_sp,

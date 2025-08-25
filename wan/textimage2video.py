@@ -30,6 +30,7 @@ from .utils.fm_solvers import (
 from .utils.fm_solvers_unipc import FlowUniPCMultistepScheduler
 from .utils.utils import best_output_size, masks_like
 from .utils.device import empty_device_cache, synchronize_device
+from .utils.quantization import quantize_model
 
 
 class WanTI2V:
@@ -83,6 +84,12 @@ class WanTI2V:
         self.rank = rank
         self.t5_cpu = t5_cpu
         self.init_on_cpu = init_on_cpu
+        self.quant_dtype = config.dtype if config.dtype in {"int8", "nf4"} else None
+
+        if self.quant_dtype and (t5_fsdp or dit_fsdp or use_sp or t5_cpu or init_on_cpu):
+            raise ValueError(
+                "Quantized inference is incompatible with FSDP, sequence parallelism, "
+                "or CPU offload.")
 
         self.num_train_timesteps = config.num_train_timesteps
         self.param_dtype = config.param_dtype
@@ -109,6 +116,8 @@ class WanTI2V:
 
         logging.info(f"Creating WanModel from {checkpoint_dir}")
         self.model = WanModel.from_pretrained(checkpoint_dir)
+        if self.quant_dtype:
+            self.model = quantize_model(self.model, self.quant_dtype)
         self.model = self._configure_model(
             model=self.model,
             use_sp=use_sp,
