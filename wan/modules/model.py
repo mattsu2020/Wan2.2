@@ -416,6 +416,7 @@ class WanModel(ModelMixin, ConfigMixin):
         context,
         seq_len,
         y=None,
+        use_checkpoint=False,
     ):
         r"""
         Forward pass through the diffusion model
@@ -431,6 +432,8 @@ class WanModel(ModelMixin, ConfigMixin):
                 Maximum sequence length for positional encoding
             y (List[Tensor], *optional*):
                 Conditional video inputs for image-to-video mode, same shape as x
+            use_checkpoint (`bool`, *optional*, defaults to `False`):
+                Enable gradient checkpointing over each block to reduce memory usage.
 
         Returns:
             List[Tensor]:
@@ -488,7 +491,10 @@ class WanModel(ModelMixin, ConfigMixin):
                       context_lens=context_lens)
 
         for block in self.blocks:
-            x = block(x, **kwargs)
+            if use_checkpoint:
+                x = torch.utils.checkpoint.checkpoint(block, x, **kwargs)
+            else:
+                x = block(x, **kwargs)
 
         # head
         x = self.head(x, e)
