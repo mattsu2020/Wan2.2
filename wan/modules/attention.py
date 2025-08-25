@@ -64,7 +64,7 @@ def flash_attention(
     """
     half_dtypes = (torch.float16, torch.bfloat16)
     assert dtype in half_dtypes
-    assert q.device.type == "cuda" and q.size(-1) <= 256
+    assert q.size(-1) <= 256
 
     # params
     b, lq, lk, out_dtype = q.size(0), q.size(1), k.size(1), q.dtype
@@ -183,6 +183,28 @@ def attention(
             dtype=dtype,
             version=fa_version,
         )
+
+    if q.device.type == "mps":
+        # MPS fallback uses PyTorch's scaled_dot_product_attention. Inputs are
+        # cast to half precision when possible to reduce memory usage. This
+        # implementation is slower and more memory intensive than FlashAttention
+        # on CUDA GPUs.
+        if q_lens is not None or k_lens is not None:
+            warnings.warn(
+                "Padding mask is disabled when using scaled_dot_product_attention. "
+                "It can have a significant impact on performance."
+            )
+        attn_mask = None
+        half_dtypes = (torch.float16, torch.bfloat16)
+        mps_dtype = dtype if dtype in half_dtypes else torch.float16
+        q_dtype = q.dtype
+        q = q.transpose(1, 2).to(mps_dtype)
+        k = k.transpose(1, 2).to(mps_dtype)
+        v = v.transpose(1, 2).to(mps_dtype)
+        out = torch.nn.functional.scaled_dot_product_attention(
+            q, k, v, attn_mask=attn_mask, is_causal=causal, dropout_p=dropout_p
+        )
+        return out.transpose(1, 2).to(q_dtype).contiguous()
 
     if XFORMERS_AVAILABLE and q.device.type != "cpu":
         if q_lens is not None or k_lens is not None:
