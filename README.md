@@ -79,6 +79,20 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
+##### Optional: memory efficient attention kernels
+
+For lower memory usage and faster attention, install one of the optional
+backends. The library will automatically select the best kernel available at
+runtime and fall back to PyTorch's native implementation if none are installed.
+
+```sh
+# FlashAttention for NVIDIA GPUs
+pip install flash-attn --no-build-isolation
+
+# xFormers (works on CUDA and Apple's MPS backend)
+pip install xformers
+```
+
 ##### macOS
 
 ```sh
