@@ -6,6 +6,7 @@ import torch.nn as nn
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.models.modeling_utils import ModelMixin
 from torch import autocast
+from torch.utils.checkpoint import checkpoint
 
 from .attention import flash_attention
 
@@ -342,7 +343,8 @@ class WanModel(ModelMixin, ConfigMixin):
                  window_size=(-1, -1),
                  qk_norm=True,
                  cross_attn_norm=True,
-                 eps=1e-6):
+                 eps=1e-6,
+                 use_checkpoint=False):
         r"""
         Initialize the diffusion model backbone.
 
@@ -377,6 +379,8 @@ class WanModel(ModelMixin, ConfigMixin):
                 Enable cross-attention normalization
             eps (`float`, *optional*, defaults to 1e-6):
                 Epsilon value for normalization layers
+            use_checkpoint (`bool`, *optional*, defaults to False):
+                Enable gradient checkpointing for transformer blocks
         """
 
         super().__init__()
@@ -398,6 +402,7 @@ class WanModel(ModelMixin, ConfigMixin):
         self.qk_norm = qk_norm
         self.cross_attn_norm = cross_attn_norm
         self.eps = eps
+        self.use_checkpoint = use_checkpoint
 
         # embeddings
         self.patch_embedding = nn.Conv3d(in_dim,
@@ -514,7 +519,10 @@ class WanModel(ModelMixin, ConfigMixin):
                       context_lens=context_lens)
 
         for block in self.blocks:
-            x = block(x, **kwargs)
+            if self.use_checkpoint:
+                x = checkpoint(lambda x, block=block: block(x, **kwargs), x)
+            else:
+                x = block(x, **kwargs)
 
         # head
         x = self.head(x, e)
