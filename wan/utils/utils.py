@@ -9,6 +9,7 @@ import tempfile
 import imageio
 import torch
 import torchvision
+from .device import empty_device_cache
 
 __all__ = ['save_video', 'save_image', 'str2bool', 'get_best_device']
 
@@ -71,24 +72,27 @@ def save_video(tensor,
 
     # save to cache
     try:
-        # preprocess
         tensor = tensor.clamp(min(value_range), max(value_range))
-        tensor = torch.stack([
-            torchvision.utils.make_grid(
-                u, nrow=nrow, normalize=normalize, value_range=value_range)
-            for u in tensor.unbind(2)
-        ],
-                             dim=1).permute(1, 2, 3, 0)
-        tensor = (tensor * 255).type(torch.uint8).cpu()
 
-        # write video
         writer = imageio.get_writer(cache_file,
                                     fps=fps,
                                     codec='libx264',
                                     quality=8)
-        for frame in tensor.numpy():
-            writer.append_data(frame)
+        with torch.no_grad():
+            for u in tensor.unbind(2):
+                frame = torchvision.utils.make_grid(
+                    u,
+                    nrow=nrow,
+                    normalize=normalize,
+                    value_range=value_range,
+                )
+                frame = (frame * 255).type(torch.uint8).permute(1, 2, 0).cpu()
+                writer.append_data(frame.numpy())
+                del frame
+                empty_device_cache()
         writer.close()
+        del tensor
+        empty_device_cache()
     except Exception as e:
         logging.info(f'save_video failed, error: {e}')
 
