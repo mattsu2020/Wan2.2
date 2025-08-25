@@ -430,12 +430,16 @@ class WanModel(ModelMixin, ConfigMixin):
         # buffers (don't use register_buffer otherwise dtype will be changed in to())
         assert (dim % num_heads) == 0 and (dim // num_heads) % 2 == 0
         d = dim // num_heads
+
+        # keep track of parameter dtype and cast freqs accordingly
+        self.param_dtype = self.patch_embedding.weight.dtype
         self.freqs = torch.cat([
             rope_params(1024, d - 4 * (d // 6)),
             rope_params(1024, 2 * (d // 6)),
             rope_params(1024, 2 * (d // 6))
         ],
                                dim=1)
+        self.freqs = self.freqs.to(self._get_complex_dtype(self.param_dtype))
 
         # initialize weights
         self.init_weights()
@@ -555,6 +559,42 @@ class WanModel(ModelMixin, ConfigMixin):
             u = u.reshape(c, *[i * j for i, j in zip(v, self.patch_size)])
             out.append(u)
         return out
+
+    def to(self, *args, **kwargs):
+        module = super().to(*args, **kwargs)
+        dtype = kwargs.get("dtype")
+        device = kwargs.get("device")
+
+        if dtype is None or device is None:
+            for arg in args:
+                if isinstance(arg, torch.dtype) and dtype is None:
+                    dtype = arg
+                elif isinstance(arg, torch.device) and device is None:
+                    device = arg
+                elif isinstance(arg, torch.Tensor):
+                    if dtype is None:
+                        dtype = arg.dtype
+                    if device is None:
+                        device = arg.device
+
+        if dtype is not None:
+            self.param_dtype = dtype
+
+        complex_dtype = self._get_complex_dtype(dtype) if dtype is not None else None
+        if device is not None or complex_dtype is not None:
+            self.freqs = self.freqs.to(device=device, dtype=complex_dtype)
+
+        return module
+
+    @staticmethod
+    def _get_complex_dtype(dtype):
+        if dtype in (torch.float16, torch.bfloat16):
+            return torch.complex32 if hasattr(torch, "complex32") else torch.complex64
+        if dtype == torch.float32:
+            return torch.complex64
+        if dtype == torch.float64:
+            return torch.complex128
+        raise TypeError(f"Unsupported dtype: {dtype}")
 
     def init_weights(self):
         r"""
