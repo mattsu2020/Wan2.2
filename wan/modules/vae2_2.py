@@ -2,7 +2,7 @@
 import logging
 
 import torch
-import torch.cuda.amp as amp
+from torch import amp
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
@@ -895,11 +895,19 @@ class Wan2_2_VAE:
         dim_mult=[1, 2, 4, 4],
         temperal_downsample=[False, True, True],
         dtype=torch.float,
-        device="cuda",
+        device=None,
     ):
 
         self.dtype = dtype
-        self.device = device
+        if device is None:
+            if torch.cuda.is_available():
+                self.device = torch.device("cuda")
+            elif torch.backends.mps.is_available():
+                self.device = torch.device("mps")
+            else:
+                self.device = torch.device("cpu")
+        else:
+            self.device = torch.device(device)
 
         mean = torch.tensor(
             [
@@ -953,7 +961,7 @@ class Wan2_2_VAE:
                 -0.0667,
             ],
             dtype=dtype,
-            device=device,
+            device=self.device,
         )
         std = torch.tensor(
             [
@@ -1007,7 +1015,7 @@ class Wan2_2_VAE:
                 0.7744,
             ],
             dtype=dtype,
-            device=device,
+            device=self.device,
         )
         self.scale = [mean, 1.0 / std]
 
@@ -1019,13 +1027,13 @@ class Wan2_2_VAE:
                 dim=c_dim,
                 dim_mult=dim_mult,
                 temperal_downsample=temperal_downsample,
-            ).eval().requires_grad_(False).to(device))
+            ).eval().requires_grad_(False).to(self.device))
 
     def encode(self, videos):
         try:
             if not isinstance(videos, list):
                 raise TypeError("videos should be a list")
-            with amp.autocast(dtype=self.dtype):
+            with amp.autocast(self.device.type, dtype=self.dtype):
                 return [
                     self.model.encode(u.unsqueeze(0),
                                       self.scale).float().squeeze(0)
@@ -1039,7 +1047,7 @@ class Wan2_2_VAE:
         try:
             if not isinstance(zs, list):
                 raise TypeError("zs should be a list")
-            with amp.autocast(dtype=self.dtype):
+            with amp.autocast(self.device.type, dtype=self.dtype):
                 return [
                     self.model.decode(u.unsqueeze(0),
                                       self.scale).float().clamp_(-1,

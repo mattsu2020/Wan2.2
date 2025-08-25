@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from functools import partial
 
 import torch
-import torch.cuda.amp as amp
+from torch import amp
 import torch.distributed as dist
 import torchvision.transforms.functional as TF
 from PIL import Image
@@ -72,7 +72,12 @@ class WanTI2V:
                 Convert DiT model parameters dtype to 'config.param_dtype'.
                 Only works without FSDP.
         """
-        self.device = torch.device(f"cuda:{device_id}")
+        if torch.cuda.is_available():
+            self.device = torch.device(f"cuda:{device_id}")
+        elif torch.backends.mps.is_available():
+            self.device = torch.device("mps")
+        else:
+            self.device = torch.device("cpu")
         self.config = config
         self.rank = rank
         self.t5_cpu = t5_cpu
@@ -327,7 +332,7 @@ class WanTI2V:
 
         # evaluation mode
         with (
-                torch.amp.autocast('cuda', dtype=self.param_dtype),
+                amp.autocast(self.device.type, dtype=self.param_dtype),
                 torch.no_grad(),
                 no_sync(),
         ):
@@ -519,7 +524,7 @@ class WanTI2V:
 
         # evaluation mode
         with (
-                torch.amp.autocast('cuda', dtype=self.param_dtype),
+                amp.autocast(self.device.type, dtype=self.param_dtype),
                 torch.no_grad(),
                 no_sync(),
         ):

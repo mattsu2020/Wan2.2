@@ -2,7 +2,7 @@
 import logging
 
 import torch
-import torch.cuda.amp as amp
+from torch import amp
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
@@ -622,9 +622,17 @@ class Wan2_1_VAE:
                  z_dim=16,
                  vae_pth='cache/vae_step_411000.pth',
                  dtype=torch.float,
-                 device="cuda"):
+                 device=None):
         self.dtype = dtype
-        self.device = device
+        if device is None:
+            if torch.cuda.is_available():
+                self.device = torch.device("cuda")
+            elif torch.backends.mps.is_available():
+                self.device = torch.device("mps")
+            else:
+                self.device = torch.device("cpu")
+        else:
+            self.device = torch.device(device)
 
         mean = [
             -0.7571, -0.7089, -0.9113, 0.1075, -0.1745, 0.9653, -0.1517, 1.5508,
@@ -634,28 +642,28 @@ class Wan2_1_VAE:
             2.8184, 1.4541, 2.3275, 2.6558, 1.2196, 1.7708, 2.6052, 2.0743,
             3.2687, 2.1526, 2.8652, 1.5579, 1.6382, 1.1253, 2.8251, 1.9160
         ]
-        self.mean = torch.tensor(mean, dtype=dtype, device=device)
-        self.std = torch.tensor(std, dtype=dtype, device=device)
+        self.mean = torch.tensor(mean, dtype=dtype, device=self.device)
+        self.std = torch.tensor(std, dtype=dtype, device=self.device)
         self.scale = [self.mean, 1.0 / self.std]
 
         # init model
         self.model = _video_vae(
             pretrained_path=vae_pth,
             z_dim=z_dim,
-        ).eval().requires_grad_(False).to(device)
+        ).eval().requires_grad_(False).to(self.device)
 
     def encode(self, videos):
         """
         videos: A list of videos each with shape [C, T, H, W].
         """
-        with amp.autocast(dtype=self.dtype):
+        with amp.autocast(self.device.type, dtype=self.dtype):
             return [
                 self.model.encode(u.unsqueeze(0), self.scale).float().squeeze(0)
                 for u in videos
             ]
 
     def decode(self, zs):
-        with amp.autocast(dtype=self.dtype):
+        with amp.autocast(self.device.type, dtype=self.dtype):
             return [
                 self.model.decode(u.unsqueeze(0),
                                   self.scale).float().clamp_(-1, 1).squeeze(0)
