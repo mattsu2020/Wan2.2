@@ -17,6 +17,9 @@ wan_shared_cfg.t5_dtype = wan_shared_cfg.dtype
 wan_shared_cfg.t5_quantization = None
 wan_shared_cfg.text_len = 512
 
+# DiT quantization (e.g., '8bit' to enable int8 quantization)
+wan_shared_cfg.dit_quantization = None
+
 # transformer
 wan_shared_cfg.param_dtype = torch.float16
 

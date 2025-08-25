@@ -85,6 +85,7 @@ class WanT2V:
         self.num_train_timesteps = config.num_train_timesteps
         self.boundary = config.boundary
         self.param_dtype = config.param_dtype
+        self.dit_quantization = config.dit_quantization
 
         if t5_fsdp or dit_fsdp or use_sp:
             self.init_on_cpu = False
@@ -116,7 +117,8 @@ class WanT2V:
             use_sp=use_sp,
             dit_fsdp=dit_fsdp,
             shard_fn=shard_fn,
-            convert_model_dtype=convert_model_dtype)
+            convert_model_dtype=convert_model_dtype,
+            dit_quantization=config.dit_quantization)
 
         self.high_noise_model = WanModel.from_pretrained(
             checkpoint_dir, subfolder=config.high_noise_checkpoint)
@@ -125,7 +127,8 @@ class WanT2V:
             use_sp=use_sp,
             dit_fsdp=dit_fsdp,
             shard_fn=shard_fn,
-            convert_model_dtype=convert_model_dtype)
+            convert_model_dtype=convert_model_dtype,
+            dit_quantization=config.dit_quantization)
         if use_sp:
             self.sp_size = get_world_size()
         else:
@@ -133,8 +136,13 @@ class WanT2V:
 
         self.sample_neg_prompt = config.sample_neg_prompt
 
-    def _configure_model(self, model, use_sp, dit_fsdp, shard_fn,
-                         convert_model_dtype):
+    def _configure_model(self,
+                         model,
+                         use_sp,
+                         dit_fsdp,
+                         shard_fn,
+                         convert_model_dtype,
+                         dit_quantization=None):
         """
         Configures a model object. This includes setting evaluation modes,
         applying distributed parallel strategy, and handling device placement.
@@ -151,7 +159,10 @@ class WanT2V:
             convert_model_dtype (`bool`):
                 Convert DiT model parameters dtype to 'config.param_dtype'.
                 Only works without FSDP and requires the checkpoint to support
-                the target dtype.
+                the target dtype. Ignored when ``dit_quantization`` is set.
+            dit_quantization (`str` | `bool`):
+                Enable int8 quantization of DiT weights. Uses bitsandbytes when
+                available, otherwise falls back to ``torch.int8`` casting.
 
         Returns:
             torch.nn.Module:
@@ -171,7 +182,9 @@ class WanT2V:
         if dit_fsdp:
             model = shard_fn(model)
         else:
-            if convert_model_dtype:
+            if dit_quantization is not None:
+                model.quantize(dit_quantization)
+            elif convert_model_dtype:
                 if model.param_dtype not in (torch.float32, self.param_dtype):
                     raise ValueError(
                         f"Checkpoint dtype {model.param_dtype} does not support conversion to {self.param_dtype}"

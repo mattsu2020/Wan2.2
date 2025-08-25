@@ -13,6 +13,43 @@ from .attention import flash_attention
 __all__ = ['WanModel']
 
 
+def _replace_with_bnb_linear(module):
+    """Recursively replace ``nn.Linear`` with ``bitsandbytes`` int8 modules.
+
+    If ``bitsandbytes`` is unavailable, this function will raise an
+    ``ImportError`` which should be handled by the caller.
+    """
+    import bitsandbytes as bnb  # noqa: F401
+
+    for name, child in list(module.named_children()):
+        if isinstance(child, nn.Linear):
+            new_layer = bnb.nn.Linear8bitLt(
+                child.in_features, child.out_features, bias=child.bias is not None
+            )
+            new_layer.weight = child.weight
+            if child.bias is not None:
+                new_layer.bias = child.bias
+            setattr(module, name, new_layer)
+        else:
+            _replace_with_bnb_linear(child)
+
+
+def _quantize_to_int8(module):
+    """Quantize module parameters to int8.
+
+    Attempts to leverage ``bitsandbytes`` int8 linear layers. If the
+    library is not available, all parameters are cast to ``torch.int8`` as a
+    fallback.
+    """
+    try:
+        _replace_with_bnb_linear(module)
+    except Exception:  # pragma: no cover - fallback when bnb isn't available
+        for param in module.parameters():
+            param.data = param.data.to(torch.int8)
+        for buffer in module.buffers():
+            buffer.data = buffer.data.to(torch.int8)
+    module.param_dtype = torch.int8
+    return module
 def sinusoidal_embedding_1d(dim, position, dtype: torch.dtype | None = None):
     """Generate 1D sinusoidal embeddings.
 
@@ -601,6 +638,25 @@ class WanModel(ModelMixin, ConfigMixin):
         if dtype == torch.float64:
             return torch.complex128
         raise TypeError(f"Unsupported dtype: {dtype}")
+
+    def quantize(self, quantization=None):
+        """Apply quantization to model parameters.
+
+        Currently only ``int8``/``8bit`` quantization is supported. The method
+        will try to leverage ``bitsandbytes`` if available. Otherwise, it will
+        cast parameters to ``torch.int8``.
+
+        Args:
+            quantization (str | bool): Flag indicating whether to quantize the
+                model. Any truthy value or the strings ``'int8'``/``'8bit'``
+                trigger quantization.
+
+        Returns:
+            WanModel: The quantized model instance.
+        """
+        if quantization in ("int8", "8bit", True):
+            _quantize_to_int8(self)
+        return self
 
     def init_weights(self):
         r"""
