@@ -94,6 +94,11 @@ pip3 install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0
 pip install $(grep -v 'flash_attn' requirements.txt | xargs)
 ```
 
+# Verify that PyTorch detects the MPS backend
+python -c "import torch; print(torch.backends.mps.is_available())"
+
+> FlashAttention is currently unsupported on Apple's MPS backend, so installing `flash_attn` is unnecessary.
+
 Set the following environment variable to enable CPU fallback for operations not yet
 implemented by Apple's MPS backend:
 
@@ -106,6 +111,8 @@ export PYTORCH_ENABLE_MPS_FALLBACK=1
 - Ensure macOS 12.3 or later and the Xcode command-line tools are installed.
 - If `MPS backend not available` errors occur, verify that your Python environment
   targets `arm64` and reinstall PyTorch using the command above.
+- Apple's GPUs have limited unified memory; if you encounter OOM errors, try running
+  generation with `--offload_model True`.
 
 
 #### Model Download
