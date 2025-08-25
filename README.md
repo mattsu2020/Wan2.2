@@ -96,11 +96,13 @@ python -c "import torch; print(torch.backends.mps.is_available())"
 ```
 > FlashAttention is currently unsupported on Apple's MPS backend, so `flash_attn` is skipped and `xformers` is installed instead.
 
-Set the following environment variable to enable CPU fallback for operations not yet
-implemented by Apple's MPS backend:
+`generate.py` will enable CPU fallback for operations not implemented by Apple's
+MPS backend by setting `PYTORCH_ENABLE_MPS_FALLBACK=1` when the variable is
+unset. If you need to control this behavior manually, export the variable
+yourself before running the script:
 
 ```sh
-export PYTORCH_ENABLE_MPS_FALLBACK=1
+export PYTORCH_ENABLE_MPS_FALLBACK=1  # optional manual override
 ```
 
 **Troubleshooting**
