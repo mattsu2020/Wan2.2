@@ -76,9 +76,13 @@ cd Wan2.2
 Install dependencies:
 ```sh
 # Ensure torch >= 2.4.0
-# If the installation of `flash_attn` fails, try installing the other packages first and install `flash_attn` last
+# Install core dependencies
 pip install -r requirements.txt
+# Optional: install FlashAttention for faster attention kernels
+# pip install -r extras/flash_attn.txt
 ```
+
+> **macOS users**: `flash_attn` can be omitted. Without it, Wan2.2 falls back to the standard PyTorch attention implementation.
 
 
 #### Model Download
