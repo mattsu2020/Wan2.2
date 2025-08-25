@@ -76,8 +76,10 @@ cd Wan2.2
 Install dependencies:
 ```sh
 # Ensure torch >= 2.4.0
-# If the installation of `flash_attn` fails, try installing the other packages first and install `flash_attn` last
 pip install -r requirements.txt
+# Optional: install flash_attn separately for faster attention kernels
+# On macOS, either skip flash_attn or manually build a compatible version
+pip install flash_attn
 ```
 
 

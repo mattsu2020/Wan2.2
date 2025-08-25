@@ -26,7 +26,6 @@ dependencies = [
     "ftfy",
     "dashscope",
     "imageio-ffmpeg",
-    "flash_attn",
     "numpy>=1.23.5,<2"
 ]
 
@@ -38,6 +37,9 @@ dev = [
     "isort",
     "mypy",
     "huggingface-hub[cli]"
+]
+flash-attn = [
+    "flash_attn"
 ]
 
 [project.urls]
