@@ -7,6 +7,8 @@ import torch.nn.functional as F
 from einops import rearrange
 from torch import autocast
 
+from ..utils.utils import get_best_device
+
 __all__ = [
     'Wan2_1_VAE',
 ]
@@ -616,8 +618,10 @@ class Wan2_1_VAE:
                  z_dim=16,
                  vae_pth='cache/vae_step_411000.pth',
                  dtype=torch.float,
-                 device="cuda"):
+                 device=None):
         self.dtype = dtype
+        if device is None:
+            device = get_best_device()
         self.device = device
 
         mean = [
