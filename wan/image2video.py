@@ -266,7 +266,8 @@ class WanI2V:
         # preprocess
         guide_scale = (guide_scale, guide_scale) if isinstance(
             guide_scale, float) else guide_scale
-        img = TF.to_tensor(img).sub_(0.5).div_(0.5).to(self.device)
+        img = TF.to_tensor(img).sub_(0.5).div_(0.5).to(
+            self.device, dtype=self.param_dtype)
 
         F = frame_num
         h, w = img.shape[1:]
@@ -320,15 +321,15 @@ class WanI2V:
             context = [t.to(self.device) for t in context]
             context_null = [t.to(self.device) for t in context_null]
 
-        y = self.vae.encode([
-            torch.concat([
-                torch.nn.functional.interpolate(
-                    img[None].cpu(), size=(h, w), mode='bicubic').transpose(
-                        0, 1),
-                torch.zeros(3, F - 1, h, w)
-            ],
-                         dim=1).to(self.device)
-        ])[0]
+        frames = torch.zeros(3,
+                             F,
+                             h,
+                             w,
+                             device=self.device,
+                             dtype=self.param_dtype)
+        frames[:, :1] = torch.nn.functional.interpolate(
+            img[None], size=(h, w), mode='bicubic').transpose(0, 1)
+        y = self.vae.encode([frames])[0]
         y = torch.concat([msk, y])
 
         @contextmanager
