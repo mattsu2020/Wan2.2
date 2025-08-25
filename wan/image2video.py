@@ -318,7 +318,9 @@ class WanI2V:
         if not self.t5_cpu:
             self.text_encoder.model.to(self.device)
             context = self.text_encoder([input_prompt], self.device)
+            context = [t.to(self.param_dtype) for t in context]
             context_null = self.text_encoder([n_prompt], self.device)
+            context_null = [t.to(self.param_dtype) for t in context_null]
             if offload_model:
                 self.text_encoder.model.cpu()
                 empty_device_cache()  # offloaded text encoder; free GPU cache
@@ -328,6 +330,8 @@ class WanI2V:
             context_null = self.text_encoder([n_prompt], torch.device('cpu'))
             context = [t.to(self.device) for t in context]
             context_null = [t.to(self.device) for t in context_null]
+            context = [t.to(self.param_dtype) for t in context]
+            context_null = [t.to(self.param_dtype) for t in context_null]
 
         frames = torch.zeros(3,
                              F,
