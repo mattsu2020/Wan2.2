@@ -145,7 +145,7 @@ def attention(
     dtype=torch.bfloat16,
     fa_version=None,
 ):
-    if FLASH_ATTN_2_AVAILABLE or FLASH_ATTN_3_AVAILABLE:
+    if (FLASH_ATTN_2_AVAILABLE or FLASH_ATTN_3_AVAILABLE) and q.device.type == "cuda":
         return flash_attention(
             q=q,
             k=k,
@@ -161,19 +161,19 @@ def attention(
             dtype=dtype,
             version=fa_version,
         )
-    else:
-        if q_lens is not None or k_lens is not None:
-            warnings.warn(
-                'Padding mask is disabled when using scaled_dot_product_attention. It can have a significant impact on performance.'
-            )
-        attn_mask = None
 
-        q = q.transpose(1, 2).to(dtype)
-        k = k.transpose(1, 2).to(dtype)
-        v = v.transpose(1, 2).to(dtype)
+    if q_lens is not None or k_lens is not None:
+        warnings.warn(
+            'Padding mask is disabled when using scaled_dot_product_attention. It can have a significant impact on performance.'
+        )
+    attn_mask = None
 
-        out = torch.nn.functional.scaled_dot_product_attention(
-            q, k, v, attn_mask=attn_mask, is_causal=causal, dropout_p=dropout_p)
+    q = q.transpose(1, 2).to(dtype)
+    k = k.transpose(1, 2).to(dtype)
+    v = v.transpose(1, 2).to(dtype)
 
-        out = out.transpose(1, 2).contiguous()
-        return out
+    out = torch.nn.functional.scaled_dot_product_attention(
+        q, k, v, attn_mask=attn_mask, is_causal=causal, dropout_p=dropout_p)
+
+    out = out.transpose(1, 2).contiguous()
+    return out
