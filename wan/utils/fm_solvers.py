@@ -36,36 +36,47 @@ def retrieve_timesteps(
     device=None,
     timesteps=None,
     sigmas=None,
+    dtype=None,
     **kwargs,
 ):
+    if dtype is None:
+        dtype = getattr(getattr(scheduler, "config", None), "param_dtype", torch.float32)
     if timesteps is not None and sigmas is not None:
         raise ValueError(
             "Only one of `timesteps` or `sigmas` can be passed. Please choose one to set custom values"
         )
     if timesteps is not None:
         accepts_timesteps = "timesteps" in set(
-            inspect.signature(scheduler.set_timesteps).parameters.keys())
+            inspect.signature(scheduler.set_timesteps).parameters.keys()
+        )
         if not accepts_timesteps:
             raise ValueError(
                 f"The current scheduler class {scheduler.__class__}'s `set_timesteps` does not support custom"
                 f" timestep schedules. Please check whether you are using the correct scheduler."
             )
-        scheduler.set_timesteps(timesteps=timesteps, device=device, **kwargs)
+        scheduler.set_timesteps(
+            timesteps=timesteps, device=device, dtype=dtype, **kwargs
+        )
         timesteps = scheduler.timesteps
         num_inference_steps = len(timesteps)
     elif sigmas is not None:
         accept_sigmas = "sigmas" in set(
-            inspect.signature(scheduler.set_timesteps).parameters.keys())
+            inspect.signature(scheduler.set_timesteps).parameters.keys()
+        )
         if not accept_sigmas:
             raise ValueError(
                 f"The current scheduler class {scheduler.__class__}'s `set_timesteps` does not support custom"
                 f" sigmas schedules. Please check whether you are using the correct scheduler."
             )
-        scheduler.set_timesteps(sigmas=sigmas, device=device, **kwargs)
+        scheduler.set_timesteps(
+            sigmas=sigmas, device=device, dtype=dtype, **kwargs
+        )
         timesteps = scheduler.timesteps
         num_inference_steps = len(timesteps)
     else:
-        scheduler.set_timesteps(num_inference_steps, device=device, **kwargs)
+        scheduler.set_timesteps(
+            num_inference_steps, device=device, dtype=dtype, **kwargs
+        )
         timesteps = scheduler.timesteps
     return timesteps, num_inference_steps
 
@@ -234,6 +245,7 @@ class FlowDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         sigmas: Optional[List[float]] = None,
         mu: Optional[Union[float, None]] = None,
         shift: Optional[Union[float, None]] = None,
+        dtype: Optional[torch.dtype] = None,
     ):
         """
         Sets the discrete timesteps used for the diffusion chain (to be run before inference).
@@ -248,6 +260,9 @@ class FlowDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
             raise ValueError(
                 " you have to pass a value for `mu` when `use_dynamic_shifting` is set to be `True`"
             )
+
+        if dtype is None:
+            dtype = getattr(self.config, "param_dtype", torch.float32)
 
         if sigmas is None:
             sigmas = np.linspace(self.sigma_max, self.sigma_min,
@@ -276,9 +291,9 @@ class FlowDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         sigmas = np.concatenate([sigmas, [sigma_last]
                                 ]).astype(np.float32)  # pyright: ignore
 
-        self.sigmas = torch.from_numpy(sigmas)
+        self.sigmas = torch.from_numpy(sigmas).to(dtype=dtype)
         self.timesteps = torch.from_numpy(timesteps).to(
-            device=device, dtype=torch.int64)
+            device=device, dtype=dtype)
 
         self.num_inference_steps = len(timesteps)
 
