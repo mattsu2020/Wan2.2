@@ -289,7 +289,7 @@ class WanT2V:
                         target_shape[1],
                         target_shape[2],
                         target_shape[3],
-                        dtype=torch.float32,
+                        dtype=self.param_dtype,
                         device=self.device,
                         generator=seed_g)
         ]

@@ -318,7 +318,7 @@ class WanTI2V:
                         target_shape[1],
                         target_shape[2],
                         target_shape[3],
-                        dtype=torch.float32,
+                        dtype=self.param_dtype,
                         device=self.device,
                         generator=seed_g)
         ]
@@ -495,7 +495,7 @@ class WanTI2V:
                             (F - 1) // self.vae_stride[0] + 1,
                             oh // self.vae_stride[1],
                             ow // self.vae_stride[2],
-                            dtype=torch.float32,
+                            dtype=self.param_dtype,
                             generator=seed_g,
                             device=self.device)
 
