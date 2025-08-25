@@ -163,7 +163,8 @@ def attention(
     dtype=torch.bfloat16,
     fa_version=None,
 ):
-    if (FLASH_ATTN_2_AVAILABLE or FLASH_ATTN_3_AVAILABLE) and q.device.type == "cuda":
+
+    if q.device.type == "cuda" and (FLASH_ATTN_2_AVAILABLE or FLASH_ATTN_3_AVAILABLE):
         return flash_attention(
             q=q,
             k=k,
@@ -180,30 +181,54 @@ def attention(
             version=fa_version,
         )
 
-    if XFORMERS_AVAILABLE and q.device.type != "cpu":
+    def _memory_efficient_attention(q, k, v):
         if q_lens is not None or k_lens is not None:
             warnings.warn(
                 "Padding mask is disabled when using memory_efficient_attention. "
                 "It can have a significant impact on performance."
             )
 
-        q = q.transpose(1, 2).to(dtype)
-        k = k.transpose(1, 2).to(dtype)
-        v = v.transpose(1, 2).to(dtype)
-        b, h, l, d = q.shape
-        q = q.reshape(b * h, l, d)
-        k = k.reshape(b * h, k.shape[2], k.shape[3])
-        v = v.reshape(b * h, v.shape[2], v.shape[3])
+        q_t = q.transpose(1, 2).to(dtype)
+        k_t = k.transpose(1, 2).to(dtype)
+        v_t = v.transpose(1, 2).to(dtype)
+        b, h, l, d = q_t.shape
+        q_t = q_t.reshape(b * h, l, d)
+        k_t = k_t.reshape(b * h, k_t.shape[2], k_t.shape[3])
+        v_t = v_t.reshape(b * h, v_t.shape[2], v_t.shape[3])
 
         if q_scale is not None:
-            q = q * q_scale
+            q_t = q_t * q_scale
         if softmax_scale is not None:
-            q = q * softmax_scale
+            q_t = q_t * softmax_scale
 
         attn_bias = LowerTriangularMask() if causal else None
-        out = memory_efficient_attention(q, k, v, attn_bias=attn_bias, p=dropout_p)
+        out = memory_efficient_attention(q_t, k_t, v_t, attn_bias=attn_bias, p=dropout_p)
         out = out.reshape(b, h, l, d).transpose(1, 2).contiguous()
         return out
+
+    if q.device.type != "cuda" and XFORMERS_AVAILABLE:
+        return _memory_efficient_attention(q, k, v)
+
+    if q.device.type != "cuda":
+        if q_lens is not None or k_lens is not None:
+            warnings.warn(
+                "Padding mask is disabled when using scaled_dot_product_attention. It can have a significant impact on performance."
+            )
+        attn_mask = None
+
+        q_t = q.transpose(1, 2).to(dtype)
+        k_t = k.transpose(1, 2).to(dtype)
+        v_t = v.transpose(1, 2).to(dtype)
+
+        out = torch.nn.functional.scaled_dot_product_attention(
+            q_t, k_t, v_t, attn_mask=attn_mask, is_causal=causal, dropout_p=dropout_p
+        )
+
+        out = out.transpose(1, 2).contiguous()
+        return out
+
+    if XFORMERS_AVAILABLE:
+        return _memory_efficient_attention(q, k, v)
 
     if q_lens is not None or k_lens is not None:
         warnings.warn(
