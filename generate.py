@@ -216,7 +216,10 @@ def _parse_args():
         "--convert_model_dtype",
         action="store_true",
         default=False,
-        help="Whether to convert model paramerters dtype.",
+        help=(
+            "Convert model parameters to config.param_dtype when the "
+            "checkpoint supports the target dtype."
+        ),
     )
     parser.add_argument(
         "--dist_backend",
