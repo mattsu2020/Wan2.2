@@ -19,7 +19,7 @@ from wan.configs import MAX_AREA_CONFIGS, SIZE_CONFIGS, SUPPORTED_SIZES, WAN_CON
 from wan.distributed.util import init_distributed_group
 from wan.utils.device import synchronize_device
 from wan.utils.prompt_extend import DashScopePromptExpander, QwenPromptExpander
-from wan.utils.utils import save_video, str2bool
+from wan.utils.utils import save_video, str2bool, get_best_device
 
 if torch.backends.mps.is_available():
     _mps_env = os.environ.get("PYTORCH_ENABLE_MPS_FALLBACK")
@@ -262,12 +262,8 @@ def generate(args):
     rank = int(os.getenv("RANK", 0))
     world_size = int(os.getenv("WORLD_SIZE", 1))
     local_rank = int(os.getenv("LOCAL_RANK", 0))
-    if torch.cuda.is_available():
-        device = local_rank
-    elif torch.backends.mps.is_available():
-        device = "mps"
-    else:
-        device = "cpu"
+    device = get_best_device()
+    device_id = local_rank if device.type == "cuda" else device.type
     _init_logging(rank)
     logging.info(_MPS_FALLBACK_MSG)
 
@@ -277,10 +273,10 @@ def generate(args):
     backend = (
         args.dist_backend
         or os.getenv("WAN_BACKEND")
-        or ("nccl" if torch.cuda.is_available() else "gloo")
+        or ("nccl" if device.type == "cuda" else "gloo")
     )
     if world_size > 1:
-        if torch.cuda.is_available():
+        if device.type == "cuda":
             torch.cuda.set_device(local_rank)
         dist.init_process_group(
             backend=backend, init_method="env://", rank=rank, world_size=world_size
@@ -369,7 +365,7 @@ def generate(args):
         wan_t2v = wan.WanT2V(
             config=cfg,
             checkpoint_dir=args.ckpt_dir,
-            device_id=device,
+            device_id=device_id,
             rank=rank,
             t5_fsdp=args.t5_fsdp,
             dit_fsdp=args.dit_fsdp,
@@ -395,7 +391,7 @@ def generate(args):
         wan_ti2v = wan.WanTI2V(
             config=cfg,
             checkpoint_dir=args.ckpt_dir,
-            device_id=device,
+            device_id=device_id,
             rank=rank,
             t5_fsdp=args.t5_fsdp,
             dit_fsdp=args.dit_fsdp,
@@ -423,7 +419,7 @@ def generate(args):
         wan_i2v = wan.WanI2V(
             config=cfg,
             checkpoint_dir=args.ckpt_dir,
-            device_id=device,
+            device_id=device_id,
             rank=rank,
             t5_fsdp=args.t5_fsdp,
             dit_fsdp=args.dit_fsdp,
