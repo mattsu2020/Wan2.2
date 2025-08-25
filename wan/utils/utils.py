@@ -4,6 +4,7 @@ import binascii
 import logging
 import os
 import os.path as osp
+import tempfile
 
 import imageio
 import torch
@@ -39,10 +40,34 @@ def save_video(tensor,
                suffix='.mp4',
                nrow=8,
                normalize=True,
-               value_range=(-1, 1)):
+               value_range=(-1, 1),
+               tmp_dir=None):
+    """Save a 5D tensor as a video file.
+
+    Args:
+        tensor (torch.Tensor): Video tensor of shape (B, C, T, H, W).
+        save_file (str, optional): Path to save the video. If ``None`` a
+            temporary file will be created.
+        fps (int, optional): Frames per second. Defaults to ``30``.
+        suffix (str, optional): Suffix for temporary files. Defaults to ``'.mp4'``.
+        nrow (int, optional): Number of images per row. Defaults to ``8``.
+        normalize (bool, optional): Whether to normalize the tensor. Defaults to
+            ``True``.
+        value_range (tuple, optional): Value range for normalization. Defaults to
+            ``(-1, 1)``.
+        tmp_dir (str, optional): Directory used for temporary files when
+            ``save_file`` is ``None``. Defaults to ``None`` which uses
+            :func:`tempfile.gettempdir`.
+
+    Returns:
+        None
+    """
     # cache file
-    cache_file = osp.join('/tmp', rand_name(
-        suffix=suffix)) if save_file is None else save_file
+    if save_file is None:
+        tmp_dir = tempfile.gettempdir() if tmp_dir is None else tmp_dir
+        cache_file = osp.join(tmp_dir, rand_name(suffix=suffix))
+    else:
+        cache_file = save_file
 
     # save to cache
     try:
