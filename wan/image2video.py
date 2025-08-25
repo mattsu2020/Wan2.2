@@ -201,7 +201,8 @@ class WanI2V:
         if offload_model or self.init_on_cpu:
             if next(getattr(
                     self,
-                    offload_model_name).parameters()).device.type == 'cuda':
+                    offload_model_name).parameters()).device.type in ('cuda', 'mps'):
+                # Offload unused model from GPU/MPS to CPU to free memory
                 getattr(self, offload_model_name).to('cpu')
             if next(getattr(
                     self,
