@@ -168,6 +168,7 @@ class FlowUniPCMultistepScheduler(SchedulerMixin, ConfigMixin):
         sigmas: Optional[List[float]] = None,
         mu: Optional[Union[float, None]] = None,
         shift: Optional[Union[float, None]] = None,
+        dtype: Optional[torch.dtype] = None,
     ):
         """
         Sets the discrete timesteps used for the diffusion chain (to be run before inference).
@@ -182,6 +183,9 @@ class FlowUniPCMultistepScheduler(SchedulerMixin, ConfigMixin):
             raise ValueError(
                 " you have to pass a value for `mu` when `use_dynamic_shifting` is set to be `True`"
             )
+
+        if dtype is None:
+            dtype = getattr(self.config, "param_dtype", torch.float32)
 
         if sigmas is None:
             sigmas = np.linspace(self.sigma_max, self.sigma_min,
@@ -210,9 +214,9 @@ class FlowUniPCMultistepScheduler(SchedulerMixin, ConfigMixin):
         sigmas = np.concatenate([sigmas, [sigma_last]
                                 ]).astype(np.float32)  # pyright: ignore
 
-        self.sigmas = torch.from_numpy(sigmas)
+        self.sigmas = torch.from_numpy(sigmas).to(dtype=dtype)
         self.timesteps = torch.from_numpy(timesteps).to(
-            device=device, dtype=torch.int64)
+            device=device, dtype=dtype)
 
         self.num_inference_steps = len(timesteps)
 
@@ -222,7 +226,9 @@ class FlowUniPCMultistepScheduler(SchedulerMixin, ConfigMixin):
         self.lower_order_nums = 0
         self.last_sample = None
         if self.solver_p:
-            self.solver_p.set_timesteps(self.num_inference_steps, device=device)
+            self.solver_p.set_timesteps(
+                self.num_inference_steps, device=device, dtype=dtype
+            )
 
         # add an index counter for schedulers that allow duplicated timesteps
         self._step_index = None
