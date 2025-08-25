@@ -16,6 +16,7 @@ from PIL import Image
 
 import wan
 from wan.configs import MAX_AREA_CONFIGS, SIZE_CONFIGS, SUPPORTED_SIZES, WAN_CONFIGS
+from wan.configs.shared_config import set_precision, wan_shared_cfg
 from wan.distributed.util import init_distributed_group
 from wan.utils.device import empty_device_cache, synchronize_device
 from wan.utils.prompt_extend import DashScopePromptExpander, QwenPromptExpander
@@ -236,6 +237,13 @@ def _parse_args():
         ),
     )
     parser.add_argument(
+        "--precision",
+        type=str,
+        default=None,
+        choices=["fp32", "fp16", "bf16"],
+        help="Precision for model parameters and computation. Defaults to a device-dependent choice.",
+    )
+    parser.add_argument(
         "--dist_backend",
         type=str,
         default=None,
@@ -321,6 +329,9 @@ def generate(args):
             )
 
     cfg = WAN_CONFIGS[args.task]
+    cfg.dtype = wan_shared_cfg.dtype
+    cfg.param_dtype = wan_shared_cfg.param_dtype
+    cfg.t5_dtype = wan_shared_cfg.t5_dtype
     if args.t5_quantization is not None:
         cfg.t5_quantization = args.t5_quantization
     if args.ulysses_size > 1:
@@ -479,4 +490,5 @@ def generate(args):
 
 if __name__ == "__main__":
     args = _parse_args()
+    set_precision(args.precision)
     generate(args)
