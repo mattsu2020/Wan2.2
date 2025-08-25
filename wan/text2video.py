@@ -27,6 +27,7 @@ from .utils.fm_solvers import (
     retrieve_timesteps,
 )
 from .utils.fm_solvers_unipc import FlowUniPCMultistepScheduler
+from .utils.utils import get_best_device
 
 
 class WanT2V:
@@ -71,12 +72,7 @@ class WanT2V:
                 Convert DiT model parameters dtype to 'config.param_dtype'.
                 Only works without FSDP.
         """
-        if torch.cuda.is_available():
-            self.device = torch.device(f"cuda:{device_id}")
-        elif torch.backends.mps.is_available():
-            self.device = torch.device("mps")
-        else:
-            self.device = torch.device("cpu")
+        self.device = get_best_device()
         self.config = config
         self.rank = rank
         self.t5_cpu = t5_cpu
