@@ -56,6 +56,10 @@ the script:
 export PYTORCH_ENABLE_MPS_FALLBACK=1  # optional manual override
 ```
 
+By default, `generate.py` also places the T5 model on the CPU when MPS is
+available, equivalent to passing the `--t5_cpu` flag. Use `--no_t5_cpu` to keep
+the model on the GPU.
+
 ---
 
 ### Running the Model

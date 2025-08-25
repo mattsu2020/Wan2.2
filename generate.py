@@ -70,6 +70,13 @@ def _validate_args(args):
     args.base_seed = (
         args.base_seed if args.base_seed >= 0 else random.randint(0, sys.maxsize)
     )
+
+    # Ensure the T5 model remains on CPU by default on macOS unless explicitly
+    # overridden via ``--t5_cpu`` or ``--no_t5_cpu``.
+    if torch.backends.mps.is_available() and not any(
+        flag in sys.argv for flag in ("--t5_cpu", "--no_t5_cpu")
+    ):
+        args.t5_cpu = True
     # Size check
     assert (
         args.size in SUPPORTED_SIZES[args.task]
@@ -139,11 +146,21 @@ def _parse_args():
         default=False,
         help="Whether to use FSDP for T5.",
     )
+    # On macOS (MPS available), default to running T5 on the CPU to reduce GPU memory
+    # pressure. Users can disable this behavior with ``--no_t5_cpu``.
+    t5_cpu_default = torch.backends.mps.is_available()
     parser.add_argument(
         "--t5_cpu",
+        dest="t5_cpu",
         action="store_true",
-        default=False,
+        default=t5_cpu_default,
         help="Whether to place T5 model on CPU.",
+    )
+    parser.add_argument(
+        "--no_t5_cpu",
+        dest="t5_cpu",
+        action="store_false",
+        help="Do not place T5 model on CPU.",
     )
     parser.add_argument(
         "--t5_quantization",
