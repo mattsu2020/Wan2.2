@@ -193,6 +193,12 @@ def _parse_args():
         action="store_true",
         default=False,
         help="Whether to convert model paramerters dtype.")
+    parser.add_argument(
+        "--dist_backend",
+        type=str,
+        default=None,
+        help="Torch.distributed backend. Overrides WAN_BACKEND env variable."
+             " Defaults to 'nccl' when CUDA is available, otherwise 'gloo'.")
 
     args = parser.parse_args()
 
@@ -217,17 +223,23 @@ def generate(args):
     rank = int(os.getenv("RANK", 0))
     world_size = int(os.getenv("WORLD_SIZE", 1))
     local_rank = int(os.getenv("LOCAL_RANK", 0))
-    device = local_rank
+    device = local_rank if torch.cuda.is_available() else "cpu"
     _init_logging(rank)
 
     if args.offload_model is None:
         args.offload_model = False if world_size > 1 else True
         logging.info(
             f"offload_model is not specified, set to {args.offload_model}.")
+    backend = (
+        args.dist_backend
+        or os.getenv("WAN_BACKEND")
+        or ("nccl" if torch.cuda.is_available() else "gloo")
+    )
     if world_size > 1:
-        torch.cuda.set_device(local_rank)
+        if torch.cuda.is_available():
+            torch.cuda.set_device(local_rank)
         dist.init_process_group(
-            backend="nccl",
+            backend=backend,
             init_method="env://",
             rank=rank,
             world_size=world_size)

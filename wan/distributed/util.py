@@ -1,13 +1,23 @@
 # Copyright 2024-2025 The Alibaba Wan Team Authors. All rights reserved.
+import os
 import torch
 import torch.distributed as dist
 
 
-def init_distributed_group():
-    """r initialize sequence parallel group.
+def init_distributed_group(backend: str | None = None):
+    """Initialize sequence parallel group.
+
+    The backend can be specified via argument or WAN_BACKEND environment
+    variable. When neither is provided, defaults to ``'nccl'`` if CUDA is
+    available, otherwise ``'gloo'``.
     """
+    if backend is None:
+        backend = (
+            os.getenv("WAN_BACKEND")
+            or ("nccl" if torch.cuda.is_available() else "gloo")
+        )
     if not dist.is_initialized():
-        dist.init_process_group(backend='nccl')
+        dist.init_process_group(backend=backend)
 
 
 def get_rank():
