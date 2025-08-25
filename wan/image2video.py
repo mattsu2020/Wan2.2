@@ -448,6 +448,10 @@ class WanI2V:
 
             if self.rank == 0:
                 videos = self.vae.decode(x0)
+        if offload_model:
+            self.vae.model.cpu()
+            empty_device_cache()  # offload VAE to CPU; clear cache
+            synchronize_device()
 
         del noise, latent, x0
         del sample_scheduler
