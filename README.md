@@ -119,6 +119,10 @@ yourself before running the script:
 export PYTORCH_ENABLE_MPS_FALLBACK=1  # optional manual override
 ```
 
+`generate.py` also prints current and peak GPU memory before and after
+generation via `wan.utils.device.log_memory_usage`, allowing macOS users to
+monitor MPS memory consumption.
+
 ##### Precision
 
 `generate.py` selects a default precision based on the detected device (fp16 on CUDA,

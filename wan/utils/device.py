@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import torch
 
-__all__ = ["empty_device_cache", "synchronize_device"]
+__all__ = ["empty_device_cache", "log_memory_usage", "synchronize_device"]
 
 
 def _default_device() -> torch.device:
@@ -55,3 +55,30 @@ def synchronize_device(device: str | torch.device | None = None) -> None:
     elif dev.type == "mps" and hasattr(torch, "mps") and hasattr(torch.mps, "synchronize"):
         torch.mps.synchronize()
     # CPU requires no action
+
+
+def log_memory_usage(device: str | torch.device | None = None) -> None:
+    """Print current and peak memory usage for CUDA and MPS devices.
+
+    Args:
+        device: Optional device specification. When ``None`` the best
+            available device is used.
+    """
+
+    dev = torch.device(device) if device is not None else _default_device()
+    if dev.type == "cuda":
+        current = torch.cuda.memory_allocated(dev)
+        peak = torch.cuda.max_memory_allocated(dev)
+        print(
+            f"CUDA memory - current: {current / (1<<20):.2f} MB, "
+            f"peak: {peak / (1<<20):.2f} MB"
+        )
+    elif dev.type == "mps" and hasattr(torch, "mps"):
+        current = torch.mps.current_allocated_memory()
+        peak = torch.mps.max_memory_allocated()
+        print(
+            f"MPS memory - current: {current / (1<<20):.2f} MB, "
+            f"peak: {peak / (1<<20):.2f} MB"
+        )
+    else:
+        print("Memory usage logging is only supported for CUDA and MPS devices.")
