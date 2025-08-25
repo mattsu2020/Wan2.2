@@ -18,7 +18,7 @@ import wan
 from wan.configs import MAX_AREA_CONFIGS, SIZE_CONFIGS, SUPPORTED_SIZES, WAN_CONFIGS
 from wan.distributed.util import init_distributed_group
 from wan.utils.prompt_extend import DashScopePromptExpander, QwenPromptExpander
-from wan.utils.utils import save_video, str2bool
+from wan.utils.utils import save_video, str2bool, device_synchronize
 
 EXAMPLE_PROMPT = {
     "t2v-A14B": {
@@ -223,7 +223,15 @@ def generate(args):
     rank = int(os.getenv("RANK", 0))
     world_size = int(os.getenv("WORLD_SIZE", 1))
     local_rank = int(os.getenv("LOCAL_RANK", 0))
-    device = local_rank if torch.cuda.is_available() else "cpu"
+    if torch.cuda.is_available():
+        device = f"cuda:{local_rank}"
+        device_id = local_rank
+    elif torch.backends.mps.is_available():
+        device = "mps"
+        device_id = 0
+    else:
+        device = "cpu"
+        device_id = 0
     _init_logging(rank)
 
     if args.offload_model is None:
@@ -318,7 +326,7 @@ def generate(args):
         wan_t2v = wan.WanT2V(
             config=cfg,
             checkpoint_dir=args.ckpt_dir,
-            device_id=device,
+            device_id=device_id,
             rank=rank,
             t5_fsdp=args.t5_fsdp,
             dit_fsdp=args.dit_fsdp,
@@ -343,7 +351,7 @@ def generate(args):
         wan_ti2v = wan.WanTI2V(
             config=cfg,
             checkpoint_dir=args.ckpt_dir,
-            device_id=device,
+            device_id=device_id,
             rank=rank,
             t5_fsdp=args.t5_fsdp,
             dit_fsdp=args.dit_fsdp,
@@ -370,7 +378,7 @@ def generate(args):
         wan_i2v = wan.WanI2V(
             config=cfg,
             checkpoint_dir=args.ckpt_dir,
-            device_id=device,
+            device_id=device_id,
             rank=rank,
             t5_fsdp=args.t5_fsdp,
             dit_fsdp=args.dit_fsdp,
@@ -410,7 +418,7 @@ def generate(args):
             value_range=(-1, 1))
     del video
 
-    torch.cuda.synchronize()
+    device_synchronize(device)
     if dist.is_initialized():
         dist.barrier()
         dist.destroy_process_group()

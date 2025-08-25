@@ -9,7 +9,7 @@ import imageio
 import torch
 import torchvision
 
-__all__ = ['save_video', 'save_image', 'str2bool']
+__all__ = ['save_video', 'save_image', 'str2bool', 'device_synchronize']
 
 
 def rand_name(length=8, suffix=''):
@@ -101,6 +101,19 @@ def str2bool(v):
         return False
     else:
         raise argparse.ArgumentTypeError('Boolean value expected (True/False)')
+
+
+def device_synchronize(device):
+    """Synchronize the given device if supported."""
+    if isinstance(device, torch.device):
+        device_type = device.type
+    else:
+        device_type = str(device)
+
+    if device_type.startswith("cuda") and torch.cuda.is_available():
+        torch.cuda.synchronize()
+    elif device_type.startswith("mps") and torch.backends.mps.is_available():
+        torch.mps.synchronize()
 
 
 def masks_like(tensor, zero=False, generator=None, p=0.2):
