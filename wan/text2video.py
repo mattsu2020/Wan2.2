@@ -306,7 +306,7 @@ class WanT2V:
         # evaluation mode
         with (
                 autocast(device_type=self.device.type, dtype=self.param_dtype),
-                torch.no_grad(),
+                torch.inference_mode(),
                 no_sync_low_noise(),
                 no_sync_high_noise(),
         ):
