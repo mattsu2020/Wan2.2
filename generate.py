@@ -17,11 +17,13 @@ from PIL import Image
 import wan
 from wan.configs import MAX_AREA_CONFIGS, SIZE_CONFIGS, SUPPORTED_SIZES, WAN_CONFIGS
 from wan.distributed.util import init_distributed_group
-from wan.utils.device import synchronize_device
+from wan.utils.device import limit_mps_memory, synchronize_device
 from wan.utils.prompt_extend import DashScopePromptExpander, QwenPromptExpander
 from wan.utils.utils import save_video, str2bool
 
+DEFAULT_MPS_FRACTION = 0.6
 if torch.backends.mps.is_available():
+    limit_mps_memory(DEFAULT_MPS_FRACTION)
     _mps_env = os.environ.get("PYTORCH_ENABLE_MPS_FALLBACK")
     if _mps_env is None:
         os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
@@ -120,6 +122,12 @@ def _parse_args():
         type=str2bool,
         default=None,
         help="Whether to offload the model to CPU after each model forward, reducing GPU memory usage.",
+    )
+    parser.add_argument(
+        "--mps-fraction",
+        type=float,
+        default=DEFAULT_MPS_FRACTION,
+        help="Per-process memory fraction to reserve when using Apple's MPS backend.",
     )
     parser.add_argument(
         "--ulysses_size",
@@ -270,6 +278,10 @@ def generate(args):
         device = "cpu"
     _init_logging(rank)
     logging.info(_MPS_FALLBACK_MSG)
+    if torch.backends.mps.is_available():
+        if args.mps_fraction != DEFAULT_MPS_FRACTION:
+            limit_mps_memory(args.mps_fraction)
+        logging.info(f"MPS per-process memory fraction set to {args.mps_fraction}")
 
     if args.offload_model is None:
         args.offload_model = False if world_size > 1 else True

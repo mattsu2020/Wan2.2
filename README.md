@@ -119,6 +119,14 @@ yourself before running the script:
 export PYTORCH_ENABLE_MPS_FALLBACK=1  # optional manual override
 ```
 
+By default the script also reserves 60% of the available MPS memory for the
+current process to reduce out-of-memory errors on systems with limited unified
+memory. You can adjust this limit using the `--mps-fraction` flag:
+
+```sh
+python generate.py --mps-fraction 0.8 ...
+```
+
 **Troubleshooting**
 
 - Ensure macOS 12.3 or later and the Xcode command-line tools are installed.

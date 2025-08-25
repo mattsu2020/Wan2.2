@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import torch
 
-__all__ = ["empty_device_cache", "synchronize_device"]
+__all__ = ["empty_device_cache", "synchronize_device", "limit_mps_memory"]
 
 
 def _default_device() -> torch.device:
@@ -55,3 +55,19 @@ def synchronize_device(device: str | torch.device | None = None) -> None:
     elif dev.type == "mps" and hasattr(torch, "mps") and hasattr(torch.mps, "synchronize"):
         torch.mps.synchronize()
     # CPU requires no action
+
+
+def limit_mps_memory(fraction: float) -> None:
+    """Restrict the per-process memory fraction on MPS devices.
+
+    Args:
+        fraction: Fraction of the total available memory to allocate to the
+            current process. Should be between 0 and 1.
+    """
+
+    if (
+        torch.backends.mps.is_available()
+        and hasattr(torch, "mps")
+        and hasattr(torch.mps, "set_per_process_memory_fraction")
+    ):
+        torch.mps.set_per_process_memory_fraction(fraction)
