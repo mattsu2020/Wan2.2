@@ -91,10 +91,11 @@ class WanTI2V:
             self.init_on_cpu = False
 
         shard_fn = partial(shard_model, device_id=device_id)
+        t5_device = torch.device("cpu") if t5_cpu else self.device
         self.text_encoder = T5EncoderModel(
             text_len=config.text_len,
             dtype=config.t5_dtype,
-            device=self.device,
+            device=t5_device,
             checkpoint_path=os.path.join(checkpoint_dir, config.t5_checkpoint),
             tokenizer_path=os.path.join(checkpoint_dir, config.t5_tokenizer),
             shard_fn=shard_fn if t5_fsdp else None)
@@ -413,10 +414,11 @@ class WanTI2V:
             if self.rank == 0:
                 videos = self.vae.decode(x0)
 
-        del noise, latents
+        del context, context_null, noise, latents
         del sample_scheduler
+        gc.collect()
+        empty_device_cache()
         if offload_model:
-            gc.collect()
             synchronize_device()
         if dist.is_initialized():
             dist.barrier()
@@ -624,10 +626,11 @@ class WanTI2V:
             if self.rank == 0:
                 videos = self.vae.decode(x0)
 
-        del noise, latent, x0
+        del context, context_null, noise, latent, x0
         del sample_scheduler
+        gc.collect()
+        empty_device_cache()
         if offload_model:
-            gc.collect()
             synchronize_device()
         if dist.is_initialized():
             dist.barrier()
