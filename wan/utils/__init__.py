@@ -5,8 +5,10 @@ from .fm_solvers import (
     retrieve_timesteps,
 )
 from .fm_solvers_unipc import FlowUniPCMultistepScheduler
+from .mps import ensure_float32
 
 __all__ = [
     'HuggingfaceTokenizer', 'get_sampling_sigmas', 'retrieve_timesteps',
-    'FlowDPMSolverMultistepScheduler', 'FlowUniPCMultistepScheduler'
+    'FlowDPMSolverMultistepScheduler', 'FlowUniPCMultistepScheduler',
+    'ensure_float32'
 ]
