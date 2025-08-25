@@ -369,7 +369,10 @@ class WanT2V:
             if offload_model:
                 self.low_noise_model.cpu()
                 self.high_noise_model.cpu()
-                torch.cuda.empty_cache()
+                if self.device.type == 'cuda':
+                    torch.cuda.empty_cache()
+                elif self.device.type == 'mps':
+                    torch.mps.empty_cache()
             if self.rank == 0:
                 videos = self.vae.decode(x0)
 
@@ -377,7 +380,10 @@ class WanT2V:
         del sample_scheduler
         if offload_model:
             gc.collect()
-            torch.cuda.synchronize()
+            if self.device.type == 'cuda':
+                torch.cuda.synchronize()
+            elif self.device.type == 'mps':
+                torch.mps.synchronize()
         if dist.is_initialized():
             dist.barrier()
 
