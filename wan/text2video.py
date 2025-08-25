@@ -69,7 +69,12 @@ class WanT2V:
                 Convert DiT model parameters dtype to 'config.param_dtype'.
                 Only works without FSDP.
         """
-        self.device = torch.device(f"cuda:{device_id}")
+        if torch.cuda.is_available():
+            self.device = torch.device(f"cuda:{device_id}")
+        elif torch.backends.mps.is_available():
+            self.device = torch.device("mps")
+        else:
+            self.device = torch.device("cpu")
         self.config = config
         self.rank = rank
         self.t5_cpu = t5_cpu
@@ -86,7 +91,7 @@ class WanT2V:
         self.text_encoder = T5EncoderModel(
             text_len=config.text_len,
             dtype=config.t5_dtype,
-            device=torch.device('cpu'),
+            device=self.device,
             checkpoint_path=os.path.join(checkpoint_dir, config.t5_checkpoint),
             tokenizer_path=os.path.join(checkpoint_dir, config.t5_tokenizer),
             shard_fn=shard_fn if t5_fsdp else None)
