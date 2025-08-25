@@ -26,6 +26,7 @@ except ModuleNotFoundError:
     XFORMERS_AVAILABLE = False
 
 import warnings
+from ..utils import ensure_float32
 
 __all__ = [
     "flash_attention",
@@ -163,6 +164,9 @@ def attention(
     dtype=torch.bfloat16,
     fa_version=None,
 ):
+    q = ensure_float32(q)
+    k = ensure_float32(k)
+    v = ensure_float32(v)
     if (FLASH_ATTN_2_AVAILABLE or FLASH_ATTN_3_AVAILABLE) and q.device.type == "cuda":
         return flash_attention(
             q=q,

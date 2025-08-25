@@ -8,6 +8,7 @@ from einops import rearrange
 from torch import autocast
 
 from ..utils.utils import get_best_device
+from ..utils import ensure_float32
 
 __all__ = [
     'Wan2_1_VAE',
@@ -28,9 +29,10 @@ class CausalConv3d(nn.Conv3d):
         self.padding = (0, 0, 0)
 
     def forward(self, x, cache_x=None):
+        x = ensure_float32(x)
         padding = list(self._padding)
         if cache_x is not None and self._padding[4] > 0:
-            cache_x = cache_x.to(x.device)
+            cache_x = ensure_float32(cache_x).to(x.device)
             x = torch.cat([cache_x, x], dim=2)
             padding[4] -= cache_x.shape[2]
         x = F.pad(x, padding)
@@ -51,6 +53,7 @@ class RMS_norm(nn.Module):
         self.bias = nn.Parameter(torch.zeros(shape)) if bias else 0.
 
     def forward(self, x):
+        x = ensure_float32(x)
         return F.normalize(x, dim=(1 if self.channel_first else
                                    -1)) * self.scale * self.gamma + self.bias
 
@@ -61,6 +64,7 @@ class Upsample(nn.Upsample):
         """
         Fix bfloat16 support for nearest neighbor interpolation.
         """
+        x = ensure_float32(x)
         return super().forward(x.float()).type_as(x)
 
 
@@ -103,6 +107,7 @@ class Resample(nn.Module):
             self.resample = nn.Identity()
 
     def forward(self, x, feat_cache=None, feat_idx=[0]):
+        x = ensure_float32(x)
         b, c, t, h, w = x.size()
         if self.mode == 'upsample3d':
             if feat_cache is not None:
