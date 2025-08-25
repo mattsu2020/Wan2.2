@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from functools import partial
 
 import torch
-import torch.cuda.amp as amp
+import torch.amp as amp
 import torch.distributed as dist
 from tqdm import tqdm
 
@@ -298,7 +298,7 @@ class WanT2V:
 
         # evaluation mode
         with (
-                torch.amp.autocast('cuda', dtype=self.param_dtype),
+                amp.autocast('cuda', dtype=self.param_dtype),
                 torch.no_grad(),
                 no_sync_low_noise(),
                 no_sync_high_noise(),
