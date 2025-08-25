@@ -35,27 +35,17 @@ Use [Homebrew](https://brew.sh) to install `ffmpeg` for video generation:
 brew install ffmpeg
 ```
 
-### `flash-attn`
+### Install project dependencies
 
-`flash-attn` is not supported on macOS. Skip its installation or replace it with another attention implementation such as [`xformers`](https://github.com/facebookresearch/xformers).
+After installing PyTorch, install the remaining dependencies. The requirements
+file installs `xformers` and automatically skips `flash-attn` on macOS:
 
-### Handling `flash-attn` Installation Issues
-
-macOS users can skip installing `flash_attn`.
-
-If `flash-attn` fails due to **PEP 517 build issues**, you can try one of the following fixes.
-
-#### No-Build-Isolation Installation (Recommended)
 ```bash
-poetry run pip install --upgrade pip setuptools wheel
-poetry run pip install flash-attn --no-build-isolation
-poetry install
+pip install -r requirements.txt
 ```
 
-#### Install from Git (Alternative)
-```bash
-poetry run pip install git+https://github.com/Dao-AILab/flash-attention.git
-```
+`flash-attn` is currently unsupported on macOS, but `xformers` provides similar
+attention optimizations for Apple hardware.
 
 ---
 

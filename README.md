@@ -76,8 +76,6 @@ cd Wan2.2
 Install dependencies:
 ```sh
 # Ensure torch >= 2.4.0
-# macOS users can skip installing `flash_attn`
-# If the installation of `flash_attn` fails, try installing the other packages first and install `flash_attn` last
 pip install -r requirements.txt
 ```
 
@@ -90,14 +88,13 @@ brew install ffmpeg
 # Install PyTorch with MPS acceleration
 pip3 install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0
 
-# Install remaining dependencies without flash_attn
-pip install $(grep -v 'flash_attn' requirements.txt | xargs)
-```
+# Install project dependencies (installs xformers, skips flash_attn automatically)
+pip install -r requirements.txt
 
 # Verify that PyTorch detects the MPS backend
 python -c "import torch; print(torch.backends.mps.is_available())"
-
-> FlashAttention is currently unsupported on Apple's MPS backend, so installing `flash_attn` is unnecessary.
+```
+> FlashAttention is currently unsupported on Apple's MPS backend, so `flash_attn` is skipped and `xformers` is installed instead.
 
 Set the following environment variable to enable CPU fallback for operations not yet
 implemented by Apple's MPS backend:
