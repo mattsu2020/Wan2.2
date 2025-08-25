@@ -316,7 +316,8 @@ class WanModel(ModelMixin, ConfigMixin):
                  window_size=(-1, -1),
                  qk_norm=True,
                  cross_attn_norm=True,
-                 eps=1e-6):
+                 eps=1e-6,
+                 param_dtype=torch.float32):
         r"""
         Initialize the diffusion model backbone.
 
@@ -351,6 +352,8 @@ class WanModel(ModelMixin, ConfigMixin):
                 Enable cross-attention normalization
             eps (`float`, *optional*, defaults to 1e-6):
                 Epsilon value for normalization layers
+            param_dtype (`torch.dtype`, *optional*, defaults to torch.float32):
+                Data type for model parameters
         """
 
         super().__init__()
@@ -372,6 +375,7 @@ class WanModel(ModelMixin, ConfigMixin):
         self.qk_norm = qk_norm
         self.cross_attn_norm = cross_attn_norm
         self.eps = eps
+        self.param_dtype = param_dtype
 
         # embeddings
         self.patch_embedding = nn.Conv3d(in_dim,
@@ -469,6 +473,9 @@ class WanModel(ModelMixin, ConfigMixin):
                                         t).unflatten(0, (bt, seq_len)).float())
             e0 = self.time_projection(e).unflatten(2, (6, self.dim))
             assert e.dtype == torch.float32 and e0.dtype == torch.float32
+
+        e = e.to(self.dtype)
+        e0 = e0.to(self.dtype)
 
         # context
         context_lens = None
