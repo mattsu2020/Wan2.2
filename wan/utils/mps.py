@@ -2,12 +2,13 @@ import torch
 
 
 def ensure_float32(tensor: torch.Tensor) -> torch.Tensor:
-    """Ensure ``tensor`` is ``float32`` on MPS devices.
+    """Promote ``tensor`` to ``float32`` on MPS when required.
 
-    MPS backend does not support ``float64`` tensors. This helper converts
-    ``float64`` tensors to ``float32`` when the tensor resides on an MPS
-    device. Tensors on other backends or with different dtypes are returned
-    unchanged.
+    Apple's MPS backend has limited support for some operations in half
+    precision and does not support ``float64``. This helper casts tensors to
+    ``float32`` only when they reside on an MPS device and are not already in
+    that dtype. Tensors on other backends or already using ``float32`` are
+    returned unchanged.
 
     Parameters
     ----------
@@ -19,6 +20,6 @@ def ensure_float32(tensor: torch.Tensor) -> torch.Tensor:
     torch.Tensor
         The converted tensor if necessary, otherwise the original tensor.
     """
-    if isinstance(tensor, torch.Tensor) and tensor.device.type == "mps" and tensor.dtype == torch.float64:
+    if isinstance(tensor, torch.Tensor) and tensor.device.type == "mps" and tensor.dtype != torch.float32:
         return tensor.float()
     return tensor

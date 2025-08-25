@@ -130,6 +130,12 @@ argument:
 - `fp32`: highest memory use but most compatible. Required for some MPS operations;
   the script automatically falls back to fp32 on MPS when needed.
 
+On macOS with Apple silicon you can force half-precision modes by explicitly
+passing `--precision fp16` or `--precision bf16` to `generate.py`. The MPS
+backend will attempt to run in the requested dtype, but any unsupported
+operations will be promoted to fp32 (and may fall back to the CPU), which can
+impact performance.
+
 Choosing a lower precision reduces GPU memory consumption but may not be supported
 on all hardware.
 
