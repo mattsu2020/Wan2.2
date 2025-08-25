@@ -161,16 +161,34 @@ def attention(
             dtype=dtype,
             version=fa_version,
         )
-
-    if q_lens is not None or k_lens is not None:
-        warnings.warn(
-            'Padding mask is disabled when using scaled_dot_product_attention. It can have a significant impact on performance.'
-        )
-    attn_mask = None
-
     q = q.transpose(1, 2).to(dtype)
     k = k.transpose(1, 2).to(dtype)
     v = v.transpose(1, 2).to(dtype)
+
+    def _make_padding_mask(q_lens, k_lens):
+        if q_lens is None and k_lens is None:
+            return None
+        b, _, lq, _ = q.shape
+        lk = k.shape[2]
+        if q_lens is None:
+            q_lens = q.new_full((b,), lq, dtype=torch.int32)
+        else:
+            q_lens = q_lens.to(q.device)
+        if k_lens is None:
+            k_lens = k.new_full((b,), lk, dtype=torch.int32)
+        else:
+            k_lens = k_lens.to(k.device)
+
+        q_ids = torch.arange(lq, device=q.device, dtype=q_lens.dtype)
+        k_ids = torch.arange(lk, device=k.device, dtype=k_lens.dtype)
+        q_mask = q_ids.unsqueeze(0) >= q_lens.unsqueeze(1)
+        k_mask = k_ids.unsqueeze(0) >= k_lens.unsqueeze(1)
+        padding = q_mask.unsqueeze(2) | k_mask.unsqueeze(1)
+        mask = torch.zeros((b, 1, lq, lk), device=q.device, dtype=q.dtype)
+        mask = mask.masked_fill(padding.unsqueeze(1), float("-inf"))
+        return mask
+
+    attn_mask = _make_padding_mask(q_lens, k_lens)
 
     out = torch.nn.functional.scaled_dot_product_attention(
         q, k, v, attn_mask=attn_mask, is_causal=causal, dropout_p=dropout_p)
