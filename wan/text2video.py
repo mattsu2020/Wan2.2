@@ -65,7 +65,8 @@ class WanT2V:
             t5_cpu (`bool`, *optional*, defaults to False):
                 Whether to place T5 model on CPU. Only works without t5_fsdp.
             init_on_cpu (`bool`, *optional*, defaults to True):
-                Enable initializing Transformer Model on CPU. Only works without FSDP or USP.
+                Enable initializing Transformer Model on CPU.
+                Only works without FSDP or USP.
             convert_model_dtype (`bool`, *optional*, defaults to False):
                 Convert DiT model parameters dtype to 'config.param_dtype'.
                 Only works without FSDP.
@@ -237,13 +238,16 @@ class WanT2V:
             sample_solver (`str`, *optional*, defaults to 'unipc'):
                 Solver used to sample the video.
             sampling_steps (`int`, *optional*, defaults to 50):
-                Number of diffusion sampling steps. Higher values improve quality but slow generation
+                Number of diffusion sampling steps.
+                Higher values improve quality but slow generation
             guide_scale (`float` or tuple[`float`], *optional*, defaults 5.0):
-                Classifier-free guidance scale. Controls prompt adherence vs. creativity.
+                Classifier-free guidance scale.
+                Controls prompt adherence vs. creativity.
                 If tuple, the first guide_scale will be used for low noise model and
                 the second guide_scale will be used for high noise model.
             n_prompt (`str`, *optional*, defaults to ""):
-                Negative prompt for content exclusion. If not given, use `config.sample_neg_prompt`
+                Negative prompt for content exclusion.
+                If not given, use `config.sample_neg_prompt`
             seed (`int`, *optional*, defaults to -1):
                 Random seed for noise generation. If -1, use random seed.
             offload_model (`bool`, *optional*, defaults to True):
@@ -294,7 +298,7 @@ class WanT2V:
                         target_shape[1],
                         target_shape[2],
                         target_shape[3],
-                        dtype=torch.float32,
+                        dtype=self.param_dtype,
                         device=self.device,
                         generator=seed_g)
         ]
