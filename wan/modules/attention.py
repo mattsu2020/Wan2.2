@@ -13,6 +13,15 @@ try:
 except ModuleNotFoundError:
     FLASH_ATTN_2_AVAILABLE = False
 
+try:
+    from xformers.ops import (  # type: ignore
+        LowerTriangularMask,
+        memory_efficient_attention,
+    )
+    XFORMERS_AVAILABLE = True
+except ModuleNotFoundError:
+    XFORMERS_AVAILABLE = False
+
 import warnings
 
 __all__ = [
@@ -161,6 +170,36 @@ def attention(
             dtype=dtype,
             version=fa_version,
         )
+
+    if (
+        XFORMERS_AVAILABLE and torch.backends.mps.is_available()
+        and q.device.type == "mps"
+    ):
+        if q_lens is not None or k_lens is not None:
+            warnings.warn(
+                'Padding mask is disabled when using memory_efficient_attention. '
+                'It can have a significant impact on performance.'
+            )
+
+        q = q.transpose(1, 2).to(dtype)
+        k = k.transpose(1, 2).to(dtype)
+        v = v.transpose(1, 2).to(dtype)
+        b, h, l, d = q.shape
+        q = q.reshape(b * h, l, d)
+        k = k.reshape(b * h, k.shape[2], k.shape[3])
+        v = v.reshape(b * h, v.shape[2], v.shape[3])
+
+        if q_scale is not None:
+            q = q * q_scale
+        if softmax_scale is not None:
+            q = q * softmax_scale
+
+        attn_bias = LowerTriangularMask() if causal else None
+        out = memory_efficient_attention(
+            q, k, v, attn_bias=attn_bias, p=dropout_p
+        )
+        out = out.reshape(b, h, l, d).transpose(1, 2).contiguous()
+        return out
 
     if q_lens is not None or k_lens is not None:
         warnings.warn(
