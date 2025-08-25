@@ -290,7 +290,7 @@ class WanI2V:
         noise = torch.randn(16, (F - 1) // self.vae_stride[0] + 1,
                             lat_h,
                             lat_w,
-                            dtype=torch.float32,
+                            dtype=self.param_dtype,
                             generator=seed_g,
                             device=self.device)
 
