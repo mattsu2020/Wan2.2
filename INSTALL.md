@@ -17,6 +17,28 @@ To install all dependencies:
 poetry install
 ```
 
+## macOS
+
+### PyTorch with MPS
+
+Install PyTorch with [MPS](https://pytorch.org/docs/stable/mps.html) support for Apple Silicon or Intel Macs:
+
+```bash
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+```
+
+### `ffmpeg` via Homebrew
+
+Use [Homebrew](https://brew.sh) to install `ffmpeg` for video generation:
+
+```bash
+brew install ffmpeg
+```
+
+### `flash-attn`
+
+`flash-attn` is not supported on macOS. Skip its installation or replace it with another attention implementation such as [`xformers`](https://github.com/facebookresearch/xformers).
+
 ### Handling `flash-attn` Installation Issues
 
 macOS users can skip installing `flash_attn`.
@@ -43,6 +65,12 @@ Once the installation is complete, you can run **Wan2.2** using:
 
 ```bash
 poetry run python generate.py --task t2v-A14B --size '1280*720' --ckpt_dir ./Wan2.2-T2V-A14B --prompt "Two anthropomorphic cats in comfy boxing gear and bright gloves fight intensely on a spotlighted stage."
+```
+
+On machines with limited GPU support (e.g. macOS), you can offload model components to the CPU:
+
+```bash
+poetry run python generate.py --task t2v-A14B --size '512*512' --ckpt_dir ./Wan2.2-T2V-A14B --prompt "Two anthropomorphic cats" --offload_model true
 ```
 
 #### Test
