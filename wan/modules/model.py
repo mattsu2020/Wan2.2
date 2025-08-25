@@ -12,26 +12,50 @@ from .attention import flash_attention
 __all__ = ['WanModel']
 
 
-def sinusoidal_embedding_1d(dim, position):
-    # preprocess
+def sinusoidal_embedding_1d(dim, position, dtype: torch.dtype | None = None):
+    """Generate 1D sinusoidal embeddings.
+
+    Args:
+        dim:      Embedding dimension (must be even).
+        position: Positions to embed.
+        dtype:    Optional dtype to use for computation. Defaults to
+                   ``torch.float32`` when ``position`` is not already a floating
+                   tensor.
+    """
     assert dim % 2 == 0
     half = dim // 2
-    position = position.type(torch.float64)
+    if dtype is None:
+        dtype = position.dtype if torch.is_floating_point(position) else torch.float32
+    position = position.to(dtype)
 
-    # calculation
     sinusoid = torch.outer(
-        position, torch.pow(10000, -torch.arange(half).to(position).div(half)))
+        position,
+        torch.pow(torch.tensor(10000, dtype=dtype, device=position.device),
+                  -torch.arange(half, dtype=dtype, device=position.device) / half),
+    )
     x = torch.cat([torch.cos(sinusoid), torch.sin(sinusoid)], dim=1)
     return x
 
 
-def rope_params(max_seq_len, dim, theta=10000):
+def rope_params(max_seq_len, dim, theta=10000, dtype: torch.dtype = torch.float32):
+    """Create rotary positional embedding parameters.
+
+    Args:
+        max_seq_len: Maximum sequence length.
+        dim:         Dimension of the embedding (must be even).
+        theta:       Base period.
+        dtype:       Data type for computation.
+    """
     assert dim % 2 == 0
+    device = torch.device("cpu")
     freqs = torch.outer(
-        torch.arange(max_seq_len),
-        1.0 / torch.pow(theta,
-                        torch.arange(0, dim, 2).to(torch.float64).div(dim)))
-    freqs = torch.polar(torch.ones_like(freqs), freqs)
+        torch.arange(max_seq_len, dtype=dtype, device=device),
+        1.0 / torch.pow(
+            torch.tensor(theta, dtype=dtype, device=device),
+            torch.arange(0, dim, 2, dtype=dtype, device=device) / dim,
+        ),
+    )
+    freqs = torch.polar(torch.ones_like(freqs, dtype=dtype), freqs)
     return freqs
 
 
@@ -39,6 +63,8 @@ def rope_apply(x, grid_sizes, freqs):
     n, c = x.size(2), x.size(3) // 2
 
     with autocast(device_type=x.device.type, enabled=False):
+        base_dtype = freqs.real.dtype
+
         # split freqs
         freqs = freqs.split([c - 2 * (c // 3), c // 3, c // 3], dim=1)
 
@@ -48,8 +74,8 @@ def rope_apply(x, grid_sizes, freqs):
             seq_len = f * h * w
 
             # precompute multipliers
-            x_i = torch.view_as_complex(x[i, :seq_len].to(
-                torch.float64).reshape(seq_len, n, -1, 2))
+            x_i = torch.view_as_complex(
+                x[i, :seq_len].to(base_dtype).reshape(seq_len, n, -1, 2))
             freqs_i = torch.cat([
                 freqs[0][:f].view(f, 1, 1, -1).expand(f, h, w, -1),
                 freqs[1][:h].view(1, h, 1, -1).expand(f, h, w, -1),
@@ -59,11 +85,11 @@ def rope_apply(x, grid_sizes, freqs):
 
             # apply rotary embedding
             x_i = torch.view_as_real(x_i * freqs_i).flatten(2)
-            x_i = torch.cat([x_i, x[i, seq_len:]])
+            x_i = torch.cat([x_i, x[i, seq_len:].to(base_dtype)])
 
             # append to collection
             output.append(x_i)
-        return torch.stack(output).float()
+        return torch.stack(output)
 
 
 class WanRMSNorm(nn.Module):
