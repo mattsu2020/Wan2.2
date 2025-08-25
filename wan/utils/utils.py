@@ -9,7 +9,21 @@ import imageio
 import torch
 import torchvision
 
-__all__ = ['save_video', 'save_image', 'str2bool']
+__all__ = ['save_video', 'save_image', 'str2bool', 'get_device']
+
+
+def get_device():
+    """Return the best available torch device.
+
+    Returns:
+        str: ``"cuda"`` if CUDA is available, ``"mps"`` if Apple's Metal
+        Performance Shaders are available, otherwise ``"cpu"``.
+    """
+    if torch.cuda.is_available():
+        return 'cuda'
+    if torch.backends.mps.is_available():
+        return 'mps'
+    return 'cpu'
 
 
 def rand_name(length=8, suffix=''):

@@ -28,7 +28,7 @@ from .utils.fm_solvers import (
     retrieve_timesteps,
 )
 from .utils.fm_solvers_unipc import FlowUniPCMultistepScheduler
-from .utils.utils import best_output_size, masks_like
+from .utils.utils import best_output_size, masks_like, get_device
 
 
 class WanTI2V:
@@ -72,7 +72,7 @@ class WanTI2V:
                 Convert DiT model parameters dtype to 'config.param_dtype'.
                 Only works without FSDP.
         """
-        self.device = torch.device(f"cuda:{device_id}")
+        self.device = torch.device(get_device())
         self.config = config
         self.rank = rank
         self.t5_cpu = t5_cpu
@@ -327,7 +327,7 @@ class WanTI2V:
 
         # evaluation mode
         with (
-                torch.amp.autocast('cuda', dtype=self.param_dtype),
+                torch.amp.autocast(self.device.type, dtype=self.param_dtype),
                 torch.no_grad(),
                 no_sync(),
         ):
@@ -519,7 +519,7 @@ class WanTI2V:
 
         # evaluation mode
         with (
-                torch.amp.autocast('cuda', dtype=self.param_dtype),
+                torch.amp.autocast(self.device.type, dtype=self.param_dtype),
                 torch.no_grad(),
                 no_sync(),
         ):
