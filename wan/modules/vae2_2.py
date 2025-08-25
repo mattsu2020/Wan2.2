@@ -903,10 +903,19 @@ class Wan2_2_VAE:
         dim_mult=[1, 2, 4, 4],
         temperal_downsample=[False, True, True],
         dtype=torch.float,
-        device="cuda",
+        device=None,
     ):
 
         self.dtype = dtype
+        if device is None:
+            if torch.cuda.is_available():
+                device = torch.device("cuda")
+            elif torch.backends.mps.is_available():
+                device = torch.device("mps")
+            else:
+                device = torch.device("cpu")
+        else:
+            device = torch.device(device)
         self.device = device
 
         mean = torch.tensor(
