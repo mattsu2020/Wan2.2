@@ -14,11 +14,14 @@ except ModuleNotFoundError:
     FLASH_ATTN_2_AVAILABLE = False
 
 import warnings
+import logging
 
 __all__ = [
     'flash_attention',
     'attention',
 ]
+
+logger = logging.getLogger(__name__)
 
 
 def flash_attention(
@@ -51,7 +54,7 @@ def flash_attention(
     """
     half_dtypes = (torch.float16, torch.bfloat16)
     assert dtype in half_dtypes
-    assert q.device.type == 'cuda' and q.size(-1) <= 256
+    assert q.size(-1) <= 256
 
     # params
     b, lq, lk, out_dtype = q.size(0), q.size(1), k.size(1), q.dtype
@@ -145,7 +148,8 @@ def attention(
     dtype=torch.bfloat16,
     fa_version=None,
 ):
-    if FLASH_ATTN_2_AVAILABLE or FLASH_ATTN_3_AVAILABLE:
+    flash_available = FLASH_ATTN_2_AVAILABLE or FLASH_ATTN_3_AVAILABLE
+    if flash_available and q.device.type == 'cuda':
         return flash_attention(
             q=q,
             k=k,
@@ -162,6 +166,10 @@ def attention(
             version=fa_version,
         )
     else:
+        if not flash_available:
+            logger.info('flash_attn is not available; falling back to scaled_dot_product_attention.')
+        elif q.device.type != 'cuda':
+            logger.info('flash_attn requires CUDA device; falling back to scaled_dot_product_attention.')
         if q_lens is not None or k_lens is not None:
             warnings.warn(
                 'Padding mask is disabled when using scaled_dot_product_attention. It can have a significant impact on performance.'
